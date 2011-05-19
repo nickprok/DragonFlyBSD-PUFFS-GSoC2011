@@ -157,8 +157,8 @@ static int get_pi_idx(struct putter_instance *);
 
 #ifdef PUTTERDEBUG
 int putterdebug = 0;
-#define DPRINTF(x) if (putterdebug > 0) printf x
-#define DPRINTF_VERBOSE(x) if (putterdebug > 1) printf x
+#define DPRINTF(x) if (putterdebug > 0) kprintf x
+#define DPRINTF_VERBOSE(x) if (putterdebug > 1) kprintf x
 #else
 #define DPRINTF(x)
 #define DPRINTF_VERBOSE(x)
@@ -205,7 +205,7 @@ putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
 	getnanotime(&pi->pi_atime);
 
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
-		printf("putter_fop_read: private %d not inited\n", pi->pi_idx);
+		kprintf("putter_fop_read: private %d not inited\n", pi->pi_idx);
 		KERNEL_UNLOCK_ONE(NULL);
 		return ENOENT;
 	}
@@ -257,7 +257,7 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 	    pi->pi_private, uio->uio_resid));
 
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
-		printf("putter_fop_write: putter %d not inited\n", pi->pi_idx);
+		kprintf("putter_fop_write: putter %d not inited\n", pi->pi_idx);
 		KERNEL_UNLOCK_ONE(NULL);
 		return ENOENT;
 	}
@@ -302,7 +302,7 @@ putter_fop_poll(file_t *fp, int events)
 	KERNEL_LOCK(1, NULL);
 
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
-		printf("putter_fop_ioctl: putter %d not inited\n", pi->pi_idx);
+		kprintf("putter_fop_ioctl: putter %d not inited\n", pi->pi_idx);
 		KERNEL_UNLOCK_ONE(NULL);
 		return ENOENT;
 	}
