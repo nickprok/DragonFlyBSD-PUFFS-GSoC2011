@@ -44,6 +44,8 @@
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/module.h>
+#include <sys/spinlock.h>
+#include <sys/spinlock2.h>
 #include <sys/uio.h>
 
 #include <dev/misc/putter/putter_sys.h>
@@ -169,25 +171,7 @@ int putterdebug = 0;
  */
 
 /* protects both the list and the contents of the list elements */
-static kmutex_t pi_mtx;
-
-void putterattach(void);
-
-void
-putterattach(void)
-{
-
-	mutex_init(&pi_mtx, MUTEX_DEFAULT, IPL_NONE);
-}
-
-#if 0
-void
-putter_destroy(void)
-{
-
-	mutex_destroy(&pi_mtx);
-}
-#endif
+static struct spinlock pi_mtx = SPINLOCK_INITIALIZER(&pi_mtx);
 
 /*
  * fd routines, for cloner
@@ -339,7 +323,7 @@ putter_fop_close(file_t *fp)
 	KERNEL_LOCK(1, NULL);
 
  restart:
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	/*
 	 * First check if the driver was never born.  In that case
 	 * remove the instance from the list.  If mount is attempted later,
@@ -347,7 +331,7 @@ putter_fop_close(file_t *fp)
 	 */
 	if (pi->pi_private == PUTTER_EMBRYO) {
 		TAILQ_REMOVE(&putter_ilist, pi, pi_entries);
-		mutex_exit(&pi_mtx);
+		spin_unlock(&pi_mtx);
 
 		DPRINTF(("putter_fop_close: data associated with fp %p was "
 		    "embryonic\n", fp));
@@ -361,7 +345,7 @@ putter_fop_close(file_t *fp)
 	 * was removed from the list by putter_rmprivate().
 	 */
 	if (pi->pi_private == PUTTER_DEAD) {
-		mutex_exit(&pi_mtx);
+		spin_unlock(&pi_mtx);
 
 		DPRINTF(("putter_fop_close: putter associated with fp %p (%d) "
 		    "dead, freeing\n", fp, pi->pi_idx));
@@ -373,7 +357,7 @@ putter_fop_close(file_t *fp)
 	 * So we have a reference.  Proceed to unravel the
 	 * underlying driver.
 	 */
-	mutex_exit(&pi_mtx);
+	spin_unlock(&pi_mtx);
 
 	/* hmm?  suspicious locking? */
 	while ((rv = pi->pi_pop->pop_close(pi->pi_private)) == ERESTART)
@@ -430,9 +414,9 @@ filt_putterdetach(struct knote *kn)
 	struct putter_instance *pi = kn->kn_hook;
 
 	KERNEL_LOCK(1, NULL);
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	SLIST_REMOVE(&pi->pi_sel.sel_klist, kn, knote, kn_selnext);
-	mutex_exit(&pi_mtx);
+	spin_unlock(&pi_mtx);
 	KERNEL_UNLOCK_ONE(NULL);
 }
 
@@ -444,10 +428,10 @@ filt_putter(struct knote *kn, long hint)
 
 	KERNEL_LOCK(1, NULL);
 	error = 0;
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD)
 		error = 1;
-	mutex_exit(&pi_mtx);
+	spin_unlock(&pi_mtx);
 	if (error) {
 		KERNEL_UNLOCK_ONE(NULL);
 		return 0;
@@ -476,9 +460,9 @@ putter_fop_kqfilter(file_t *fp, struct knote *kn)
 		kn->kn_fop = &putter_filtops;
 		kn->kn_hook = pi;
 
-		mutex_enter(&pi_mtx);
+		spin_lock(&pi_mtx);
 		SLIST_INSERT_HEAD(klist, kn, kn_selnext);
-		mutex_exit(&pi_mtx);
+		spin_unlock(&pi_mtx);
 
 		break;
 	case EVFILT_WRITE:
@@ -504,7 +488,7 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	pi = kmalloc(sizeof(struct putter_instance), M_PUTTER,
 	    M_WAITOK | M_ZERO);
 	p = curproc;
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	idx = get_pi_idx(pi);
 
 	pi->pi_pid = p->p_pid;
@@ -515,7 +499,7 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	getnanotime(&pi->pi_btime);
 	pi->pi_atime = pi->pi_mtime = pi->pi_btime;
 	selinit(&pi->pi_sel);
-	mutex_exit(&pi_mtx);
+	spin_unlock(&pi_mtx);
 
 	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		goto bad1;
@@ -563,7 +547,7 @@ putter_attach(pid_t pid, int fd, void *ppriv, struct putter_ops *pop)
 {
 	struct putter_instance *pi = NULL;
 
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	TAILQ_FOREACH(pi, &putter_ilist, pi_entries) {
 		if (pi->pi_pid == pid && pi->pi_private == PUTTER_EMBRYO) {
 			pi->pi_private = ppriv;
@@ -572,7 +556,7 @@ putter_attach(pid_t pid, int fd, void *ppriv, struct putter_ops *pop)
 			break;
 		    }
 	}
-	mutex_exit(&pi_mtx);
+	spin_unlock(&pi_mtx);
 
 	DPRINTF(("putter_setprivate: pi at %p (%d/%d)\n", pi,
 	    pi ? pi->pi_pid : 0, pi ? pi->pi_fd : 0));
@@ -587,11 +571,10 @@ void
 putter_detach(struct putter_instance *pi)
 {
 
-	mutex_enter(&pi_mtx);
+	spin_lock(&pi_mtx);
 	TAILQ_REMOVE(&putter_ilist, pi, pi_entries);
 	pi->pi_private = PUTTER_DEAD;
-	mutex_exit(&pi_mtx);
-	seldestroy(&pi->pi_sel);
+	spin_unlock(&pi_mtx);
 
 	DPRINTF(("putter_nukebypmp: nuked %p\n", pi));
 }
@@ -609,8 +592,6 @@ get_pi_idx(struct putter_instance *pi_i)
 {
 	struct putter_instance *pi;
 	int i;
-
-	KASSERT(mutex_owned(&pi_mtx));
 
 	i = 0;
 	TAILQ_FOREACH(pi, &putter_ilist, pi_entries) {
