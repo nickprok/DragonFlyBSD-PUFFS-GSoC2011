@@ -75,6 +75,7 @@ static struct dev_ops putter_ops = {
 	.d_kqfilter =	putter_fop_kqfilter,
 };
 
+#if 0
 /*
  * Configuration data.
  *
@@ -120,6 +121,7 @@ putter_register(putter_config_fn pcfn, int minor)
 	putterconf[i].pc_config = pcfn;
 	return 0;
 }
+#endif
 
 /*
  * putter instance structures.  these are always allocated and freed
