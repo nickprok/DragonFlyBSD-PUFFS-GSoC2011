@@ -34,7 +34,7 @@
 #include <sys/param.h>
 #include <sys/proc.h>
 
-#include <dev/putter/putter.h>
+#include <dev/misc/putter/putter.h>
 
 /*
  * Configuration data.

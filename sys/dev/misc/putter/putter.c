@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.31 2011/02/06 14:29:25 haad Exp $");
 #include <sys/module.h>
 #include <sys/kauth.h>
 
-#include <dev/putter/putter_sys.h>
+#include <dev/misc/putter/putter_sys.h>
 
 /*
  * Device routines.  These are for when /dev/putter is initially
