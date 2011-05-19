@@ -218,35 +218,32 @@ putter_fop_read(struct dev_read_args *ap)
 }
 
 static int
-putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
-	kauth_cred_t cred, int flags)
+putter_fop_write(struct dev_write_args *ap)
 {
-	struct putter_instance *pi = fp->f_data;
+	cdev_t dev = ap->a_head.a_dev;
+	struct putter_instance *pi = dev->si_drv1;
+	struct uio *uio = ap->a_uio;
 	struct putter_hdr pth;
 	uint8_t *buf;
 	size_t frsize;
 	int error;
 
-	KERNEL_LOCK(1, NULL);
 	DPRINTF(("putter_fop_write (%p): writing response, resid %zu\n",
 	    pi->pi_private, uio->uio_resid));
 
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
 		kprintf("putter_fop_write: putter %d not inited\n", pi->pi_idx);
-		KERNEL_UNLOCK_ONE(NULL);
 		return ENOENT;
 	}
 
-	error = uiomove(&pth, sizeof(struct putter_hdr), uio);
+	error = uiomove((char *)&pth, sizeof(struct putter_hdr), uio);
 	if (error) {
-		KERNEL_UNLOCK_ONE(NULL);
 		return error;
 	}
 
 	/* Sorry mate, the kernel doesn't buffer. */
 	frsize = pth.pth_framelen - sizeof(struct putter_hdr);
 	if (uio->uio_resid < frsize) {
-		KERNEL_UNLOCK_ONE(NULL);
 		return EINVAL;
 	}
 
@@ -259,7 +256,6 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 	}
 	kfree(buf, M_PUTTER);
 
-	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 
