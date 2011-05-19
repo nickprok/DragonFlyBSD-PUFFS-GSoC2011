@@ -420,21 +420,17 @@ putter_fop_kqfilter(file_t *fp, struct knote *kn)
 }
 
 int
-puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
+puttercdopen(struct dev_open_args *ap)
 {
+	cdev_t dev = ap->a_head.a_dev;
 	struct putter_instance *pi;
-	file_t *fp;
-	int error, fd, idx;
-	proc_t *p;
 
 	pi = kmalloc(sizeof(struct putter_instance), M_PUTTER,
 	    M_WAITOK | M_ZERO);
-	p = curproc;
-	spin_lock(&pi_mtx);
-	idx = get_pi_idx(pi);
+	dev->si_drv1 = pi;
 
-	pi->pi_pid = p->p_pid;
-	pi->pi_idx = idx;
+	pi->pi_pid = curproc->p_pid;
+	pi->pi_idx = dev->si_uminor;
 	pi->pi_curput = NULL;
 	pi->pi_curres = 0;
 	pi->pi_curopaq = NULL;
@@ -444,25 +440,10 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	TAILQ_INSERT_TAIL(&putter_ilist, pi, pi_entries);
 	spin_unlock(&pi_mtx);
 
-	if ((error = fd_allocfile(&fp, &fd)) != 0)
-		goto bad1;
-
-	if ((error = putter_configure(dev, flags, fmt, fd)) != 0)
-		goto bad2;
-
 	DPRINTF(("puttercdopen: registered embryonic pmp for pid: %d\n",
 	    pi->pi_pid));
 
-	error = fd_clone(fp, fd, FREAD|FWRITE, &putter_fileops, pi);
-	KASSERT(error == EMOVEFD);
-	return error;
-
- bad2:
- 	fd_abort(p, fp, fd);
- bad1:
-	putter_detach(pi);
-	kmem_free(pi, sizeof(struct putter_instance));
-	return error;
+	return 0;
 }
 
 int
