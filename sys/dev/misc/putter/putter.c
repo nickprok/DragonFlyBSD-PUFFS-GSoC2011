@@ -34,9 +34,6 @@
  * transport interface.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.31 2011/02/06 14:29:25 haad Exp $");
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
