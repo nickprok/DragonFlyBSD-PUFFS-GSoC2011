@@ -176,26 +176,24 @@ static struct spinlock pi_mtx = SPINLOCK_INITIALIZER(&pi_mtx);
  */
 
 static int
-putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
-	kauth_cred_t cred, int flags)
+putter_fop_read(struct dev_read_args *ap)
 {
-	struct putter_instance *pi = fp->f_data;
+	cdev_t dev = ap->a_head.a_dev;
+	struct putter_instance *pi = dev->si_drv1;
+	struct uio *uio = ap->a_uio;
 	size_t origres, moved;
 	int error;
 
-	KERNEL_LOCK(1, NULL);
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
 		kprintf("putter_fop_read: private %d not inited\n", pi->pi_idx);
-		KERNEL_UNLOCK_ONE(NULL);
 		return ENOENT;
 	}
 
 	if (pi->pi_curput == NULL) {
 		error = pi->pi_pop->pop_getout(pi->pi_private, uio->uio_resid,
-		    fp->f_flag & O_NONBLOCK, &pi->pi_curput,
+		    ap->a_ioflag & O_NONBLOCK, &pi->pi_curput,
 		    &pi->pi_curres, &pi->pi_curopaq);
 		if (error) {
-			KERNEL_UNLOCK_ONE(NULL);
 			return error;
 		}
 	}
@@ -206,7 +204,7 @@ putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
 	DPRINTF(("putter_fop_read (%p): moved %zu bytes from %p, error %d\n",
 	    pi, moved, pi->pi_curput, error));
 
-	KASSERT(pi->pi_curres >= moved);
+	KKASSERT(pi->pi_curres >= moved);
 	pi->pi_curres -= moved;
 	pi->pi_curput += moved;
 
@@ -216,7 +214,6 @@ putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
 		pi->pi_curput = NULL;
 	}
 
-	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 
