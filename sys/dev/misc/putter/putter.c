@@ -42,10 +42,13 @@
 #include <sys/fcntl.h>
 #include <sys/filio.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/uio.h>
 
 #include <dev/misc/putter/putter_sys.h>
+
+static MALLOC_DEFINE(M_PUTTER, "putter", "Putter device data");
 
 /*
  * Device routines.  These are for when /dev/putter is initially
@@ -272,14 +275,14 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 		return EINVAL;
 	}
 
-	buf = kmem_alloc(frsize + sizeof(struct putter_hdr), KM_SLEEP);
+	buf = kmalloc(frsize + sizeof(struct putter_hdr), M_PUTTER, M_WAITOK);
 	memcpy(buf, &pth, sizeof(pth));
 	error = uiomove(buf+sizeof(struct putter_hdr), frsize, uio);
 	if (error == 0) {
 		pi->pi_pop->pop_dispatch(pi->pi_private,
 		    (struct putter_hdr *)buf);
 	}
-	kmem_free(buf, frsize + sizeof(struct putter_hdr));
+	kfree(buf, M_PUTTER);
 
 	KERNEL_UNLOCK_ONE(NULL);
 	return error;
@@ -383,7 +386,7 @@ putter_fop_close(file_t *fp)
 	 * removed from the list by putter_rmprivate() and we know it's
 	 * dead, so no need to lock.
 	 */
-	kmem_free(pi, sizeof(struct putter_instance));
+	kfree(pi, M_PUTTER);
 
 	return 0;
 }
@@ -498,8 +501,9 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	int error, fd, idx;
 	proc_t *p;
 
+	pi = kmalloc(sizeof(struct putter_instance), M_PUTTER,
+	    M_WAITOK | M_ZERO);
 	p = curproc;
-	pi = kmem_alloc(sizeof(struct putter_instance), KM_SLEEP);
 	mutex_enter(&pi_mtx);
 	idx = get_pi_idx(pi);
 
