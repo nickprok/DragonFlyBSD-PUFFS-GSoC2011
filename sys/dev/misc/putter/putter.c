@@ -64,6 +64,8 @@ static d_ioctl_t putter_fop_ioctl;
 static d_close_t putter_fop_close;
 static d_kqfilter_t putter_fop_kqfilter;
 
+DEVFS_DECLARE_CLONE_BITMAP(putter);
+
 /* dev */
 static struct dev_ops putter_ops = {
 	{ "putter", 0, 0 },
@@ -528,27 +530,39 @@ putter_notify(struct putter_instance *pi)
 	selnotify(&pi->pi_sel, 0, 0);
 }
 
-MODULE(MODULE_CLASS_DRIVER, putter, NULL);
+static int
+putter_clone(struct dev_clone_args *ap)
+{
+	int minor;
+
+	minor = devfs_clone_bitmap_get(&DEVFS_CLONE_BITMAP(putter), 0);
+	ap->a_dev = make_only_dev(&putter_ops, minor, UID_ROOT, GID_WHEEL, 0600,
+	    "putter%d", minor);
+	return 0;
+}
 
 static int
-putter_modcmd(modcmd_t cmd, void *arg)
+putter_modevent(module_t mod, int type, void *data)
 {
-#ifdef _MODULE
-	devmajor_t bmajor = NODEVMAJOR, cmajor = NODEVMAJOR;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		putterattach();
-		return devsw_attach("putter", NULL, &bmajor,
-		    &putter_cdevsw, &cmajor);
-	case MODULE_CMD_FINI:
-		return ENOTTY; /* XXX: putterdetach */
+	switch (type) {
+	case MOD_LOAD:
+		make_autoclone_dev(&putter_ops, &DEVFS_CLONE_BITMAP(putter),
+			putter_clone, UID_ROOT, GID_WHEEL, 0600, "putter");
+		break;
+	case MOD_UNLOAD:
+		devfs_clone_handler_del("putter");
+		dev_ops_remove_all(&putter_ops);
+		devfs_clone_bitmap_uninit(&DEVFS_CLONE_BITMAP(putter));
+		break;
 	default:
-		return ENOTTY;
+		break;
 	}
-#else
-	if (cmd == MODULE_CMD_INIT)
-		return 0;
-	return ENOTTY;
-#endif
+	return (0);
 }
+
+static moduledata_t putter_mod = {
+        "putter",
+        putter_modevent,
+        NULL
+};
+DECLARE_MODULE(putter, putter_mod, SI_SUB_DRIVERS, SI_ORDER_MIDDLE);
