@@ -40,14 +40,13 @@ __KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.31 2011/02/06 14:29:25 haad Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/filedesc.h>
-#include <sys/kmem.h>
-#include <sys/poll.h>
-#include <sys/stat.h>
-#include <sys/socketvar.h>
+#include <sys/device.h>
+#include <sys/devfs.h>
+#include <sys/fcntl.h>
+#include <sys/filio.h>
+#include <sys/kernel.h>
 #include <sys/module.h>
-#include <sys/kauth.h>
+#include <sys/uio.h>
 
 #include <dev/misc/putter/putter_sys.h>
 
