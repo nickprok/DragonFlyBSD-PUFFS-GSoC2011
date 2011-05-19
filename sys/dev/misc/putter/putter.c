@@ -272,14 +272,13 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
  * unmounting is a frightfully complex operation to avoid races
  */
 static int
-putter_fop_close(file_t *fp)
+putter_fop_close(struct dev_close_args *ap)
 {
-	struct putter_instance *pi = fp->f_data;
+	cdev_t dev = ap->a_head.a_dev;
+	struct putter_instance *pi = dev->si_drv1;
 	int rv;
 
 	DPRINTF(("putter_fop_close: device closed\n"));
-
-	KERNEL_LOCK(1, NULL);
 
  restart:
 	spin_lock(&pi_mtx);
@@ -292,8 +291,8 @@ putter_fop_close(file_t *fp)
 		TAILQ_REMOVE(&putter_ilist, pi, pi_entries);
 		spin_unlock(&pi_mtx);
 
-		DPRINTF(("putter_fop_close: data associated with fp %p was "
-		    "embryonic\n", fp));
+		DPRINTF(("putter_fop_close: data associated with dev %i was "
+		    "embryonic\n", dev->si_uminor));
 
 		goto out;
 	}
@@ -306,8 +305,8 @@ putter_fop_close(file_t *fp)
 	if (pi->pi_private == PUTTER_DEAD) {
 		spin_unlock(&pi_mtx);
 
-		DPRINTF(("putter_fop_close: putter associated with fp %p (%d) "
-		    "dead, freeing\n", fp, pi->pi_idx));
+		DPRINTF(("putter_fop_close: putter associated with dev %d "
+		    "dead, freeing\n", pi->pi_idx));
 
 		goto out;
 	}
@@ -323,7 +322,6 @@ putter_fop_close(file_t *fp)
 		goto restart;
 
  out:
-	KERNEL_UNLOCK_ONE(NULL);
 	/*
 	 * Finally, release the instance information.  It was already
 	 * removed from the list by putter_rmprivate() and we know it's
@@ -442,16 +440,6 @@ puttercdopen(struct dev_open_args *ap)
 
 	DPRINTF(("puttercdopen: registered embryonic pmp for pid: %d\n",
 	    pi->pi_pid));
-
-	return 0;
-}
-
-int
-puttercdclose(dev_t dev, int flags, int fmt, struct lwp *l)
-{
-
-	panic("puttercdclose impossible\n");
-
 	return 0;
 }
 
