@@ -326,14 +326,14 @@ putter_fop_close(struct dev_close_args *ap)
 }
 
 static int
-putter_fop_ioctl(file_t *fp, u_long cmd, void *data)
+putter_fop_ioctl(struct dev_ioctl_args *ap)
 {
 
 	/*
 	 * work already done in sys_ioctl().  skip sanity checks to enable
 	 * setting non-blocking fd on an embryotic driver.
 	 */
-	if (cmd == FIONBIO)
+	if (ap->a_cmd == FIONBIO)
 		return 0;
 
 	return EINVAL;
