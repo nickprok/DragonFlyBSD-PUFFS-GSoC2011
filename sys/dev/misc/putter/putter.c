@@ -132,7 +132,6 @@ putter_register(putter_config_fn pcfn, int minor)
 struct putter_instance {
 	pid_t			pi_pid;
 	int			pi_idx;
-	int			pi_fd;
 	struct selinfo		pi_sel;
 
 	void			*pi_private;
@@ -487,15 +486,15 @@ puttercdclose(dev_t dev, int flags, int fmt, struct lwp *l)
  * the same process opened multiple (since they are equal at this point).
  */
 struct putter_instance *
-putter_attach(pid_t pid, int fd, void *ppriv, struct putter_ops *pop)
+putter_attach(pid_t pid, int minor, void *ppriv, struct putter_ops *pop)
 {
 	struct putter_instance *pi = NULL;
 
 	spin_lock(&pi_mtx);
 	TAILQ_FOREACH(pi, &putter_ilist, pi_entries) {
-		if (pi->pi_pid == pid && pi->pi_private == PUTTER_EMBRYO) {
+		if (pi->pi_pid == pid && pi->pi_idx == minor &&
+		    pi->pi_private == PUTTER_EMBRYO) {
 			pi->pi_private = ppriv;
-			pi->pi_fd = fd;
 			pi->pi_pop = pop;
 			break;
 		    }
@@ -503,7 +502,7 @@ putter_attach(pid_t pid, int fd, void *ppriv, struct putter_ops *pop)
 	spin_unlock(&pi_mtx);
 
 	DPRINTF(("putter_setprivate: pi at %p (%d/%d)\n", pi,
-	    pi ? pi->pi_pid : 0, pi ? pi->pi_fd : 0));
+	    pi ? pi->pi_pid : 0, pi ? pi->pi_idx : 0));
 
 	return pi;
 }
