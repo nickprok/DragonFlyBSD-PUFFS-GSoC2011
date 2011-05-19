@@ -149,8 +149,6 @@ struct putter_instance {
 static TAILQ_HEAD(, putter_instance) putter_ilist
     = TAILQ_HEAD_INITIALIZER(putter_ilist);
 
-static int get_pi_idx(struct putter_instance *);
-
 #ifdef DEBUG
 #ifndef PUTTERDEBUG
 #define PUTTERDEBUG
@@ -584,30 +582,6 @@ putter_notify(struct putter_instance *pi)
 {
 
 	selnotify(&pi->pi_sel, 0, 0);
-}
-
-/* search sorted list of instances for free minor, sorted insert arg */
-static int
-get_pi_idx(struct putter_instance *pi_i)
-{
-	struct putter_instance *pi;
-	int i;
-
-	i = 0;
-	TAILQ_FOREACH(pi, &putter_ilist, pi_entries) {
-		if (i != pi->pi_idx)
-			break;
-		i++;
-	}
-
-	pi_i->pi_private = PUTTER_EMBRYO;
-
-	if (pi == NULL)
-		TAILQ_INSERT_TAIL(&putter_ilist, pi_i, pi_entries);
-	else
-		TAILQ_INSERT_BEFORE(pi, pi_i, pi_entries);
-
-	return i;
 }
 
 MODULE(MODULE_CLASS_DRIVER, putter, NULL);
