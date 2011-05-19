@@ -137,9 +137,6 @@ struct putter_instance {
 	uint8_t			*pi_curput;
 	size_t			pi_curres;
 	void			*pi_curopaq;
-	struct timespec		pi_atime;
-	struct timespec		pi_mtime;
-	struct timespec		pi_btime;
 
 	TAILQ_ENTRY(putter_instance) pi_entries;
 };
@@ -184,8 +181,6 @@ putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
 	int error;
 
 	KERNEL_LOCK(1, NULL);
-	getnanotime(&pi->pi_atime);
-
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
 		kprintf("putter_fop_read: private %d not inited\n", pi->pi_idx);
 		KERNEL_UNLOCK_ONE(NULL);
@@ -233,8 +228,6 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 	int error;
 
 	KERNEL_LOCK(1, NULL);
-	getnanotime(&pi->pi_mtime);
-
 	DPRINTF(("putter_fop_write (%p): writing response, resid %zu\n",
 	    pi->pi_private, uio->uio_resid));
 
@@ -374,23 +367,6 @@ putter_fop_close(file_t *fp)
 }
 
 static int
-putter_fop_stat(file_t *fp, struct stat *st)
-{
-	struct putter_instance *pi = fp->f_data;
-
-	(void)memset(st, 0, sizeof(*st));
-	KERNEL_LOCK(1, NULL);
-	st->st_dev = makedev(cdevsw_lookup_major(&putter_cdevsw), pi->pi_idx);
-	st->st_atimespec = pi->pi_atime;
-	st->st_mtimespec = pi->pi_mtime;
-	st->st_ctimespec = st->st_birthtimespec = pi->pi_btime;
-	st->st_uid = kauth_cred_geteuid(fp->f_cred);
-	st->st_gid = kauth_cred_getegid(fp->f_cred);
-	KERNEL_UNLOCK_ONE(NULL);
-	return 0;
-}
-
-static int
 putter_fop_ioctl(file_t *fp, u_long cmd, void *data)
 {
 
@@ -494,9 +470,10 @@ puttercdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	pi->pi_curput = NULL;
 	pi->pi_curres = 0;
 	pi->pi_curopaq = NULL;
-	getnanotime(&pi->pi_btime);
-	pi->pi_atime = pi->pi_mtime = pi->pi_btime;
-	selinit(&pi->pi_sel);
+	pi->pi_private = PUTTER_EMBRYO;
+
+	spin_lock(&pi_mtx);
+	TAILQ_INSERT_TAIL(&putter_ilist, pi, pi_entries);
 	spin_unlock(&pi_mtx);
 
 	if ((error = fd_allocfile(&fp, &fd)) != 0)
