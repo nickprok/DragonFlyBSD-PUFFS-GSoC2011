@@ -132,7 +132,7 @@ putter_register(putter_config_fn pcfn, int minor)
 struct putter_instance {
 	pid_t			pi_pid;
 	int			pi_idx;
-	struct selinfo		pi_sel;
+	struct kqinfo		pi_kq;
 
 	void			*pi_private;
 	struct putter_ops	*pi_pop;
@@ -344,69 +344,70 @@ putter_fop_ioctl(struct dev_ioctl_args *ap)
 static void
 filt_putterdetach(struct knote *kn)
 {
-	struct putter_instance *pi = kn->kn_hook;
+	struct putter_instance *pi = (void *)kn->kn_hook;
+	struct klist *klist;
 
-	KERNEL_LOCK(1, NULL);
-	spin_lock(&pi_mtx);
-	SLIST_REMOVE(&pi->pi_sel.sel_klist, kn, knote, kn_selnext);
-	spin_unlock(&pi_mtx);
-	KERNEL_UNLOCK_ONE(NULL);
+	klist = &pi->pi_kq.ki_note;
+	knote_remove(klist, kn);
 }
 
 static int
-filt_putter(struct knote *kn, long hint)
+filt_putter_rd(struct knote *kn, long hint)
 {
-	struct putter_instance *pi = kn->kn_hook;
+	struct putter_instance *pi = (void *)kn->kn_hook;
 	int error, rv;
 
-	KERNEL_LOCK(1, NULL);
 	error = 0;
 	spin_lock(&pi_mtx);
 	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD)
 		error = 1;
 	spin_unlock(&pi_mtx);
 	if (error) {
-		KERNEL_UNLOCK_ONE(NULL);
 		return 0;
 	}
 
 	kn->kn_data = pi->pi_pop->pop_waitcount(pi->pi_private);
 	rv = kn->kn_data != 0;
-	KERNEL_UNLOCK_ONE(NULL);
 	return rv;
 }
 
-static const struct filterops putter_filtops =
-	{ 1, NULL, filt_putterdetach, filt_putter };
+static int
+filt_putter_wr(struct knote *kn, long hint)
+{
+	/* Writing is always OK */
+	return (1);
+}
+
+static struct filterops putter_filtops_rd =
+        { FILTEROP_ISFD, NULL, filt_putterdetach, filt_putter_rd };
+static struct filterops putter_filtops_wr =
+        { FILTEROP_ISFD, NULL, filt_putterdetach, filt_putter_wr };
 
 static int
-putter_fop_kqfilter(file_t *fp, struct knote *kn)
+putter_fop_kqfilter(struct dev_kqfilter_args *ap)
 {
-	struct putter_instance *pi = fp->f_data;
+	cdev_t dev = ap->a_head.a_dev;
+	struct putter_instance *pi = dev->si_drv1;
+	struct knote *kn = ap->a_kn;
 	struct klist *klist;
-
-	KERNEL_LOCK(1, NULL);
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		klist = &pi->pi_sel.sel_klist;
-		kn->kn_fop = &putter_filtops;
-		kn->kn_hook = pi;
-
-		spin_lock(&pi_mtx);
-		SLIST_INSERT_HEAD(klist, kn, kn_selnext);
-		spin_unlock(&pi_mtx);
-
+		kn->kn_fop = &putter_filtops_rd;
+		kn->kn_hook = (char *)pi;
 		break;
 	case EVFILT_WRITE:
-		kn->kn_fop = &seltrue_filtops;
+		kn->kn_fop = &putter_filtops_wr;
+		kn->kn_hook = (char *)pi;
 		break;
 	default:
-		KERNEL_UNLOCK_ONE(NULL);
-		return EINVAL;
+		ap->a_result = EOPNOTSUPP;
+		return 0;
 	}
 
-	KERNEL_UNLOCK_ONE(NULL);
+	klist = &pi->pi_kq.ki_note;
+	knote_insert(klist, kn);
+
 	return 0;
 }
 
@@ -488,7 +489,7 @@ void
 putter_notify(struct putter_instance *pi)
 {
 
-	selnotify(&pi->pi_sel, 0, 0);
+	KNOTE(&pi->pi_kq.ki_note, 0);
 }
 
 static int
