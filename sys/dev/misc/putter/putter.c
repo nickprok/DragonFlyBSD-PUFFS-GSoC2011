@@ -52,15 +52,22 @@
  * opened before it has been cloned.
  */
 
-dev_type_open(puttercdopen);
-dev_type_close(puttercdclose);
-dev_type_ioctl(puttercdioctl);
+static d_open_t puttercdopen;
+static d_read_t putter_fop_read;
+static d_write_t putter_fop_write;
+static d_ioctl_t putter_fop_ioctl;
+static d_close_t putter_fop_close;
+static d_kqfilter_t putter_fop_kqfilter;
 
 /* dev */
-const struct cdevsw putter_cdevsw = {
-	puttercdopen,	puttercdclose,	noread,		nowrite,
-	noioctl,	nostop,		notty,		nopoll,
-	nommap,		nokqfilter,	D_OTHER
+static struct dev_ops putter_ops = {
+	{ "putter", 0, 0 },
+	.d_open =	puttercdopen,
+	.d_close =	putter_fop_close,
+	.d_read =	putter_fop_read,
+	.d_write =	putter_fop_write,
+	.d_ioctl =	putter_fop_ioctl,
+	.d_kqfilter =	putter_fop_kqfilter,
 };
 
 /*
@@ -182,28 +189,6 @@ putter_destroy(void)
 /*
  * fd routines, for cloner
  */
-static int putter_fop_read(file_t *, off_t *, struct uio *,
-			   kauth_cred_t, int);
-static int putter_fop_write(file_t *, off_t *, struct uio *,
-			    kauth_cred_t, int);
-static int putter_fop_ioctl(file_t*, u_long, void *);
-static int putter_fop_poll(file_t *, int);
-static int putter_fop_stat(file_t *, struct stat *);
-static int putter_fop_close(file_t *);
-static int putter_fop_kqfilter(file_t *, struct knote *);
-
-
-static const struct fileops putter_fileops = {
-	.fo_read = putter_fop_read,
-	.fo_write = putter_fop_write,
-	.fo_ioctl = putter_fop_ioctl,
-	.fo_fcntl = fnullop_fcntl,
-	.fo_poll = putter_fop_poll,
-	.fo_stat = putter_fop_stat,
-	.fo_close = putter_fop_close,
-	.fo_kqfilter = putter_fop_kqfilter,
-	.fo_restart = fnullop_restart,
-};
 
 static int
 putter_fop_read(file_t *fp, off_t *off, struct uio *uio,
