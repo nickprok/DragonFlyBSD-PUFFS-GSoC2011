@@ -264,41 +264,6 @@ putter_fop_write(file_t *fp, off_t *off, struct uio *uio,
 }
 
 /*
- * Poll query interface.  The question is only if an event
- * can be read from us.
- */
-#define PUTTERPOLL_EVSET (POLLIN | POLLRDNORM | POLLRDBAND | POLLPRI)
-static int
-putter_fop_poll(file_t *fp, int events)
-{
-	struct putter_instance *pi = fp->f_data;
-	int revents;
-
-	KERNEL_LOCK(1, NULL);
-
-	if (pi->pi_private == PUTTER_EMBRYO || pi->pi_private == PUTTER_DEAD) {
-		kprintf("putter_fop_ioctl: putter %d not inited\n", pi->pi_idx);
-		KERNEL_UNLOCK_ONE(NULL);
-		return ENOENT;
-	}
-
-	revents = events & (POLLOUT | POLLWRNORM | POLLWRBAND);
-	if ((events & PUTTERPOLL_EVSET) == 0) {
-		KERNEL_UNLOCK_ONE(NULL);
-		return revents;
-	}
-
-	/* check queue */
-	if (pi->pi_pop->pop_waitcount(pi->pi_private))
-		revents |= PUTTERPOLL_EVSET;
-	else
-		selrecord(curlwp, &pi->pi_sel);
-
-	KERNEL_UNLOCK_ONE(NULL);
-	return revents;
-}
-
-/*
  * device close = forced unmount.
  *
  * unmounting is a frightfully complex operation to avoid races
