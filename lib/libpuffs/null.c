@@ -201,25 +201,11 @@ puffs_null_fs_statvfs(struct puffs_usermount *pu, struct statvfs *svfsb)
 	return 0;
 }
 
-/*
- * XXX: this is the stupidest crap ever, but:
- * getfh() returns the fhandle type, when we are expected to deliver
- * the fid type.  Just adjust it a bit and stop whining.
- *
- * Yes, this really really needs fixing.  Yes, *REALLY*.
- */
-#define FHANDLE_HEADERLEN 8
-struct kernfid {
-	unsigned short	fid_len;		/* length of data in bytes */
-	unsigned short	fid_reserved;		/* compat: historic align */
-	char		fid_data[0];		/* data (variable length) */
-};
-
 /*ARGSUSED*/
 static void *
 fhcmp(struct puffs_usermount *pu, struct puffs_node *pn, void *arg)
 {
-	struct kernfid *kf1, *kf2;
+	struct fid *kf1, *kf2;
 
 	if ((kf1 = pn->pn_data) == NULL)
 		return NULL;
@@ -245,6 +231,9 @@ puffs_null_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 {
 	struct puffs_node *pn_res;
 
+	if (fidsize != sizeof(struct fid))
+		return EINVAL;
+
 	pn_res = puffs_pn_nodewalk(pu, fhcmp, fid);
 	if (pn_res == NULL)
 		return ENOENT;
@@ -261,34 +250,22 @@ puffs_null_fs_nodetofh(struct puffs_usermount *pu, puffs_cookie_t opc,
 	void *fid, size_t *fidsize)
 {
 	struct puffs_node *pn = opc;
-	struct kernfid *kfid;
-	void *bounce;
+	fhandle_t fh;
 	int rv;
 
+	if (*fidsize != sizeof(struct fid))
+		return EINVAL;
+
 	rv = 0;
-	bounce = NULL;
-	if (*fidsize) {
-		bounce = malloc(*fidsize + FHANDLE_HEADERLEN);
-		if (!bounce)
-			return ENOMEM;
-		*fidsize += FHANDLE_HEADERLEN;
-	}
-	if (getfh(PNPATH(pn), bounce, fidsize) == -1)
+	if (getfh(PNPATH(pn), &fh) == -1)
 		rv = errno;
-	else
-		memcpy(fid, (uint8_t *)bounce + FHANDLE_HEADERLEN,
-		    *fidsize - FHANDLE_HEADERLEN);
-	kfid = fid;
 	if (rv == 0) {
-		*fidsize = kfid->fid_len;
+		*(struct fid *)fid = fh.fh_fid;
 		pn->pn_data = malloc(*fidsize);
 		if (pn->pn_data == NULL)
 			abort(); /* lazy */
 		memcpy(pn->pn_data, fid, *fidsize);
-	} else {
-		*fidsize -= FHANDLE_HEADERLEN;
 	}
-	free(bounce);
 
 	return rv;
 }
