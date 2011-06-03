@@ -106,10 +106,19 @@ int
 puffs_fsnop_statvfs(struct puffs_usermount *dontuse1, struct statvfs *sbp)
 {
 
-	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = DEV_BSIZE;
+	memset(sbp, 0, sizeof(*sbp));
 
-	sbp->f_bfree=sbp->f_bavail=sbp->f_bresvd=sbp->f_blocks = (fsblkcnt_t)0;
-	sbp->f_ffree=sbp->f_favail=sbp->f_fresvd=sbp->f_files = (fsfilcnt_t)0;
+	/* XXXDF
+	 * sbp->f_iosize
+	 */
+	sbp->f_bsize = sbp->f_frsize = DEV_BSIZE;
+
+	/* XXXDF
+	 * sbp->f_bresvd
+	 * sbp->f_fresvd
+	 */
+	sbp->f_bfree=sbp->f_bavail=sbp->f_blocks = (fsblkcnt_t)0;
+	sbp->f_ffree=sbp->f_favail=sbp->f_files = (fsfilcnt_t)0;
 
 	sbp->f_namemax = MAXNAMLEN;
 
@@ -178,6 +187,8 @@ puffs_setvattr(struct vattr *vap, const struct vattr *sva)
 	SETIFVAL(va_mtime.tv_nsec, long);
 	SETIFVAL(va_gen, u_long);
 	SETIFVAL(va_flags, u_long);
+	SETIFVAL(va_rmajor, int);
+	SETIFVAL(va_rminor, int);
 	SETIFVAL(va_bytes, u_quad_t);
 #undef SETIFVAL
 	/* ignore va->va_vaflags */
@@ -266,6 +277,7 @@ void
 puffs_stat2vattr(struct vattr *va, const struct stat *sb)
 {
 
+	memset(va, 0, sizeof(struct vattr));
 	va->va_type = puffs_mode2vt(sb->st_mode);
 	va->va_mode = sb->st_mode;
 	va->va_nlink = sb->st_nlink;
