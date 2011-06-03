@@ -5,7 +5,7 @@
 
 USE_FORT?= yes	# data-driven bugs?
 
-WARNS=		4
+WARNS=		2
 
 LIB=		puffs
 
@@ -17,5 +17,6 @@ MAN=		puffs.3 puffs_cc.3 puffs_cred.3 puffs_flush.3		\
 INCS=		puffs.h puffsdump.h
 INCSDIR=	/usr/include
 LINTFLAGS+=-S -w
+CFLAGS+=	-I${.CURDIR}/../../sys -I/usr/src/sbin/mount
 
 .include <bsd.lib.mk>
