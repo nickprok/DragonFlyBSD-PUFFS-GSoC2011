@@ -33,11 +33,11 @@ __RCSID("$NetBSD: pnode.c,v 1.10 2008/08/12 19:44:39 pooka Exp $");
 #include <sys/types.h>
 
 #include <assert.h>
-#include <puffs.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 /*

@@ -40,12 +40,12 @@ __RCSID("$NetBSD: dispatcher.c,v 1.35 2010/12/06 14:50:34 pooka Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <puffs.h>
-#include <puffsdump.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "puffs.h"
+#include "puffsdump.h"
 #include "puffs_priv.h"
 
 static void dispatch(struct puffs_cc *);

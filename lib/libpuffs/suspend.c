@@ -37,7 +37,8 @@ __RCSID("$NetBSD: suspend.c,v 1.10 2009/12/05 12:13:08 pooka Exp $");
 #include <sys/types.h>
 
 #include <errno.h>
-#include <puffs.h>
+
+#include "puffs.h"
 
 /*ARGSUSED*/
 int

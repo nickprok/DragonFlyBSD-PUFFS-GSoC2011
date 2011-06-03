@@ -43,11 +43,12 @@ __RCSID("$NetBSD: null.c,v 1.28 2009/10/18 20:14:06 pooka Exp $");
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "puffs.h"
 
 PUFFSOP_PROTOS(puffs_null)
 

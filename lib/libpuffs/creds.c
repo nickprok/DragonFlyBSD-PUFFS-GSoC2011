@@ -40,10 +40,10 @@ __RCSID("$NetBSD: creds.c,v 1.15 2009/11/20 14:23:54 pooka Exp $");
 #include <sys/param.h>
 
 #include <errno.h>
-#include <puffs.h>
 #include <stdbool.h>
 #include <string.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 #define UUCCRED(a) (a->pkcr_type == PUFFCRED_TYPE_UUC)

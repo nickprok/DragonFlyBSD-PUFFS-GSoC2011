@@ -41,11 +41,11 @@ __RCSID("$NetBSD: opdump.c,v 1.35 2010/08/20 16:35:05 pooka Exp $");
 #include <sys/types.h>
 #include <sys/time.h>
 
-#include <puffs.h>
-#include <puffsdump.h>
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "puffs.h"
+#include "puffsdump.h"
 #include "puffs_priv.h"
 
 #define DINT "    "

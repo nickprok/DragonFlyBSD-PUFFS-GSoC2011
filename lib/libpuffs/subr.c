@@ -37,12 +37,12 @@ __RCSID("$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $");
 
 #include <assert.h>
 #include <errno.h>
-#include <puffs.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 #ifndef MAXNAMLEN

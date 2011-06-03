@@ -44,11 +44,11 @@ __RCSID("$NetBSD: framebuf.c,v 1.30 2010/01/12 18:42:38 pooka Exp $");
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 struct puffs_framebuf {

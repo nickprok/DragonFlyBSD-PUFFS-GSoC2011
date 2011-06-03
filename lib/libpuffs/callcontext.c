@@ -38,13 +38,13 @@ __RCSID("$NetBSD: callcontext.c,v 1.25 2011/03/04 09:47:47 yamt Exp $");
 
 #include <assert.h>
 #include <errno.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ucontext.h>
 #include <unistd.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 #if 0

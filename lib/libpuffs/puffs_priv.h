@@ -32,8 +32,9 @@
 #include <vfs/puffs/puffs_msgif.h>
 
 #include <pthread.h>
-#include <puffs.h>
 #include <ucontext.h>
+
+#include "puffs.h"
 
 extern pthread_mutex_t pu_lock;
 #define PU_LOCK() pthread_mutex_lock(&pu_lock)

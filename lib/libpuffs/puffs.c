@@ -45,7 +45,6 @@ __RCSID("$NetBSD: puffs.c,v 1.116 2011/05/03 13:16:47 manu Exp $");
 #include <fcntl.h>
 #include <paths.h>
 #include <pthread.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +53,7 @@ __RCSID("$NetBSD: puffs.c,v 1.116 2011/05/03 13:16:47 manu Exp $");
 
 #include <vfs/puffs/puffs_msgif.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 /* Most file systems want this for opts, so just give it to them */

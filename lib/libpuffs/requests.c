@@ -42,11 +42,11 @@ __RCSID("$NetBSD: requests.c,v 1.23 2008/01/29 14:54:08 pooka Exp $");
 
 #include <assert.h>
 #include <errno.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 /*

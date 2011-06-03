@@ -39,10 +39,10 @@ __RCSID("$NetBSD: flush.c,v 1.16 2008/08/12 19:44:39 pooka Exp $");
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
-#include <puffs.h>
 #include <stdio.h>
 #include <unistd.h>
 
+#include "puffs.h"
 #include "puffs_priv.h"
 
 #if 0
