@@ -404,12 +404,6 @@ dumpattr(struct vattr *vap)
 	mydprintf("flags: %s, ", buf);
 
 	DEFAULTBUF();
-	if (vap->va_rdev != (dev_t)PUFFS_VNOVAL)
-		snprintf(buf, sizeof(buf), "0x%llx",
-		    (unsigned long long)vap->va_rdev);
-	mydprintf("rdev: %s\n", buf);
-
-	DEFAULTBUF();
 	if (vap->va_bytes != (u_quad_t)PUFFS_VNOVAL)
 		snprintf(buf, sizeof(buf), "%" PRIu64, vap->va_bytes);
 	mydprintf(DINT DINT "bytes: %s, ", buf);

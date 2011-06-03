@@ -180,7 +180,6 @@ puffs_setvattr(struct vattr *vap, const struct vattr *sva)
 	SETIFVAL(va_birthtime.tv_nsec, long);
 	SETIFVAL(va_gen, u_long);
 	SETIFVAL(va_flags, u_long);
-	SETIFVAL(va_rdev, dev_t);
 	SETIFVAL(va_bytes, u_quad_t);
 #undef SETIFVAL
 	/* ignore va->va_vaflags */
@@ -212,7 +211,8 @@ puffs_vattr_null(struct vattr *vap)
 	    vap->va_mtime.tv_nsec =
 	    vap->va_ctime.tv_nsec =
 	vap->va_birthtime.tv_nsec = PUFFS_VNOVAL;
-	vap->va_rdev = (dev_t)PUFFS_VNOVAL;
+	vap->va_rmajor = PUFFS_VNOVAL;
+	vap->va_rminor = PUFFS_VNOVAL;
 	vap->va_bytes = (u_quad_t)PUFFS_VNOVAL;
 
 	vap->va_flags = 0;
@@ -285,7 +285,6 @@ puffs_stat2vattr(struct vattr *va, const struct stat *sb)
 	va->va_birthtime = sb->st_birthtimespec;
 	va->va_gen = sb->st_gen;
 	va->va_flags = sb->st_flags;
-	va->va_rdev = sb->st_rdev;
 	va->va_bytes = sb->st_blocks << DEV_BSHIFT;
 	va->va_filerev = 0;
 	va->va_vaflags = 0;

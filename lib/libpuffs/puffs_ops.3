@@ -223,8 +223,6 @@
 .Fn puffs_newinfo_setvtype "struct puffs_newinfo *pni" "enum vtype vtype"
 .Ft void
 .Fn puffs_newinfo_setsize "struct puffs_newinfo *pni" "voff_t size"
-.Ft void
-.Fn puffs_newinfo_setrdev "struct puffs_newinfo *pni" "dev_t rdev"
 .Sh DESCRIPTION
 The operations
 .Nm puffs
@@ -366,9 +364,6 @@ should be set using
 and
 .Fn puffs_newinfo_setsize ,
 respectively.
-If the located entry is a block device or character device file,
-the dev_t for the entry should be set using
-.Fn puffs_newinfo_setrdev .
 .Pp
 The type of operation is found from
 .Va pcn-\*[Gt]pcn_nameiop :
@@ -780,14 +775,6 @@ This call is valid only for
 .Fn lookup
 and
 .Fn fhtovp .
-.It Fn puffs_newinfo_setrdev pni rdev
-Set the type of the newly located node to
-.Ar vtype .
-This call is valid only for
-.Fn lookup
-and
-.Fn fhtovp
-producing device type nodes.
 .El
 .Sh SEE ALSO
 .Xr puffs 3 ,

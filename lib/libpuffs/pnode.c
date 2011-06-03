@@ -167,10 +167,3 @@ puffs_newinfo_setsize(struct puffs_newinfo *pni, voff_t size)
 
 	*pni->pni_size = size;
 }
-
-void
-puffs_newinfo_setrdev(struct puffs_newinfo *pni, dev_t rdev)
-{
-
-	*pni->pni_rdev = rdev;
-}

@@ -495,7 +495,6 @@ struct puffs_usermount	*puffs_pn_getmnt(struct puffs_node *);
 void	puffs_newinfo_setcookie(struct puffs_newinfo *, puffs_cookie_t);
 void	puffs_newinfo_setvtype(struct puffs_newinfo *, enum vtype);
 void	puffs_newinfo_setsize(struct puffs_newinfo *, voff_t);
-void	puffs_newinfo_setrdev(struct puffs_newinfo *, dev_t);
 
 void			*puffs_pn_getmntspecific(struct puffs_node *);
 

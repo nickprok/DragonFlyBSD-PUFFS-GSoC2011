@@ -199,7 +199,6 @@ struct puffs_newinfo {
 	void		**pni_cookie;
 	enum vtype	*pni_vtype;
 	voff_t		*pni_size;
-	dev_t		*pni_rdev;
 };
 
 #define PUFFS_MAKEKCRED(to, from)					\

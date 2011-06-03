@@ -252,7 +252,6 @@ puffs_null_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 	puffs_newinfo_setcookie(pni, pn_res);
 	puffs_newinfo_setvtype(pni, pn_res->pn_va.va_type);
 	puffs_newinfo_setsize(pni, (voff_t)pn_res->pn_va.va_size);
-	puffs_newinfo_setrdev(pni, pn_res->pn_va.va_rdev);
 	return 0;
 }
 
@@ -327,7 +326,6 @@ puffs_null_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	puffs_newinfo_setcookie(pni, pn_res);
 	puffs_newinfo_setvtype(pni, pn_res->pn_va.va_type);
 	puffs_newinfo_setsize(pni, (voff_t)pn_res->pn_va.va_size);
-	puffs_newinfo_setrdev(pni, pn_res->pn_va.va_rdev);
 
 	return 0;
 }
@@ -361,8 +359,17 @@ puffs_null_node_mknod(struct puffs_usermount *pu, puffs_cookie_t opc,
 	int rv;
 
 	mode = puffs_addvtype2mode(va->va_mode, va->va_type);
-	if (mknod(PCNPATH(pcn), mode, va->va_rdev) == -1)
-		return errno;
+	switch (va->va_type) {
+	case VFIFO:
+		if (mkfifo(PCNPATH(pcn), mode) == -1)
+			return errno;
+		break;
+	case VCHR:
+	case VBLK:
+		return ENOTSUP;
+	default:
+		return EINVAL;
+	}
 
 	rv = makenode(pu, pni, pcn, va, 0);
 	if (rv)

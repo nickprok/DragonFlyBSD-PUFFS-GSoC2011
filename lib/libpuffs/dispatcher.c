@@ -199,7 +199,6 @@ dispatch(struct puffs_cc *pcc)
 			pni.pni_cookie = &auxt->pvfsr_fhcookie;
 			pni.pni_vtype = &auxt->pvfsr_vtype;
 			pni.pni_size = &auxt->pvfsr_size;
-			pni.pni_rdev = &auxt->pvfsr_rdev;
 
 			error = pops->puffs_fs_fhtonode(pu, auxt->pvfsr_data,
 			    auxt->pvfsr_dsize, &pni);
@@ -264,7 +263,6 @@ dispatch(struct puffs_cc *pcc)
 			pni.pni_cookie = &auxt->pvnr_newnode;
 			pni.pni_vtype = &auxt->pvnr_vtype;
 			pni.pni_size = &auxt->pvnr_size;
-			pni.pni_rdev = &auxt->pvnr_rdev;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
