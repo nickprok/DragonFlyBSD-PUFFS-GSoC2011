@@ -65,9 +65,11 @@ puffs_nextdent(struct dirent **dent, const char *name, ino_t id, uint8_t dtype,
 	size_t *reslen)
 {
 	struct dirent *d = *dent;
+	size_t reclen;
 
 	/* check if we have enough room for our dent-aligned dirent */
-	if (_DIRENT_RECLEN(d, strlen(name)) > *reslen)
+	reclen = _DIRENT_RECLEN(strlen(name));
+	if (reclen > *reslen)
 		return 0;
 
 	d->d_fileno = id;
@@ -75,9 +77,8 @@ puffs_nextdent(struct dirent **dent, const char *name, ino_t id, uint8_t dtype,
 	d->d_namlen = (uint16_t)strlen(name);
 	(void)memcpy(&d->d_name, name, (size_t)d->d_namlen);
 	d->d_name[d->d_namlen] = '\0';
-	d->d_reclen = (uint16_t)_DIRENT_SIZE(d);
 
-	*reslen -= d->d_reclen;
+	*reslen -= reclen;
 	*dent = _DIRENT_NEXT(d);
 
 	return 1;

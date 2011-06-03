@@ -562,11 +562,11 @@ puffs_null_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 			goto out;
 		}
 
-		if (_DIRENT_SIZE(result) > *reslen)
+		if (_DIRENT_DIRSIZ(result) > *reslen)
 			goto out;
 
 		*de = *result;
-		*reslen -= _DIRENT_SIZE(result);
+		*reslen -= _DIRENT_DIRSIZ(result);
 		de = _DIRENT_NEXT(de);
 
 		(*off)++;
