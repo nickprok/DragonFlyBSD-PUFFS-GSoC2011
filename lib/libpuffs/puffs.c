@@ -845,14 +845,14 @@ puffs__theloop(struct puffs_cc *pcc)
 			if (FIO_EN_WRITE(fio)) {
 				EV_SET(&pu->pu_evs[nchanges], fio->io_fd,
 				    EVFILT_WRITE, EV_ENABLE, 0, 0,
-				    (uintptr_t)fio);
+				    fio);
 				fio->stat |= FIO_WR;
 				nchanges++;
 			}
 			if (FIO_RM_WRITE(fio)) {
 				EV_SET(&pu->pu_evs[nchanges], fio->io_fd,
 				    EVFILT_WRITE, EV_DISABLE, 0, 0,
-				    (uintptr_t)fio);
+				    fio);
 				fio->stat &= ~FIO_WR;
 				nchanges++;
 			}
@@ -966,10 +966,10 @@ puffs_mainloop(struct puffs_usermount *pu)
 
 	LIST_FOREACH(fio, &pu->pu_ios, fio_entries) {
 		EV_SET(curev, fio->io_fd, EVFILT_READ, EV_ADD,
-		    0, 0, (uintptr_t)fio);
+		    0, 0, fio);
 		curev++;
 		EV_SET(curev, fio->io_fd, EVFILT_WRITE, EV_ADD | EV_DISABLE,
-		    0, 0, (uintptr_t)fio);
+		    0, 0, fio);
 		curev++;
 	}
 	for (i = 0; i < NSIG; i++) {

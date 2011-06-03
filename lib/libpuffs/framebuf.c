@@ -39,6 +39,7 @@ __RCSID("$NetBSD: framebuf.c,v 1.30 2010/01/12 18:42:38 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
+#include <sys/event.h>
 #include <sys/queue.h>
 
 #include <assert.h>
@@ -559,7 +560,7 @@ puffs_framev_enqueue_waitevent(struct puffs_cc *pcc, int fd, int *what)
 	if (*what & PUFFS_FBIO_READ)
 		if ((fio->stat & FIO_ENABLE_R) == 0)
 			EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE,
-			    0, 0, (uintptr_t)fio);
+			    0, 0, fio);
 
 	rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
 	if (rv != 0)
@@ -579,7 +580,7 @@ puffs_framev_enqueue_waitevent(struct puffs_cc *pcc, int fd, int *what)
 		fio->rwait--;
 		if (fio->rwait == 0 && (fio->stat & FIO_ENABLE_R) == 0) {
 			EV_SET(&kev, fd, EVFILT_READ, EV_DISABLE,
-			    0, 0, (uintptr_t)fio);
+			    0, 0, fio);
 			rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
 #if 0
 			if (rv != 0)
@@ -809,9 +810,9 @@ puffs__framev_addfd_ctrl(struct puffs_usermount *pu, int fd, int what,
 
 	if (pu->pu_state & PU_INLOOP) {
 		EV_SET(&kev[0], fd, EVFILT_READ,
-		    EV_ADD|readenable, 0, 0, (intptr_t)fio);
+		    EV_ADD|readenable, 0, 0, fio);
 		EV_SET(&kev[1], fd, EVFILT_WRITE,
-		    EV_ADD|EV_DISABLE, 0, 0, (intptr_t)fio);
+		    EV_ADD|EV_DISABLE, 0, 0, fio);
 		rv = kevent(pu->pu_kq, kev, 2, NULL, 0, NULL);
 		if (rv == -1) {
 			free(fio);
@@ -860,7 +861,7 @@ puffs_framev_enablefd(struct puffs_usermount *pu, int fd, int what)
 
 	/* write is enabled in the event loop if there is output */
 	if (what & PUFFS_FBIO_READ && fio->rwait == 0) {
-		EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE, 0, 0, (uintptr_t)fio);
+		EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE, 0, 0, fio);
 		rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
 	}
 
@@ -893,12 +894,12 @@ puffs_framev_disablefd(struct puffs_usermount *pu, int fd, int what)
 	i = 0;
 	if (what & PUFFS_FBIO_READ && fio->rwait == 0) {
 		EV_SET(&kev[0], fd,
-		    EVFILT_READ, EV_DISABLE, 0, 0, (uintptr_t)fio);
+		    EVFILT_READ, EV_DISABLE, 0, 0, fio);
 		i++;
 	}
 	if (what & PUFFS_FBIO_WRITE && fio->stat & FIO_WR && fio->wwait == 0) {
 		EV_SET(&kev[1], fd,
-		    EVFILT_WRITE, EV_DISABLE, 0, 0, (uintptr_t)fio);
+		    EVFILT_WRITE, EV_DISABLE, 0, 0, fio);
 		i++;
 	}
 	if (i)
