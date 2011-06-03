@@ -886,7 +886,7 @@ puffs__theloop(struct puffs_cc *pcc)
 #endif
 
 			fio = (void *)curev->udata;
-			if (__predict_true(fio))
+			if (__predict_true(fio != NULL))
 				pfctrl = fio->fctrl;
 			else
 				pfctrl = NULL;
