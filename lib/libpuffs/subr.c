@@ -173,11 +173,9 @@ puffs_setvattr(struct vattr *vap, const struct vattr *sva)
 	SETIFVAL(va_atime.tv_sec, time_t);
 	SETIFVAL(va_ctime.tv_sec, time_t);
 	SETIFVAL(va_mtime.tv_sec, time_t);
-	SETIFVAL(va_birthtime.tv_sec, time_t);
 	SETIFVAL(va_atime.tv_nsec, long);
 	SETIFVAL(va_ctime.tv_nsec, long);
 	SETIFVAL(va_mtime.tv_nsec, long);
-	SETIFVAL(va_birthtime.tv_nsec, long);
 	SETIFVAL(va_gen, u_long);
 	SETIFVAL(va_flags, u_long);
 	SETIFVAL(va_bytes, u_quad_t);
@@ -205,12 +203,10 @@ puffs_vattr_null(struct vattr *vap)
 	vap->va_blocksize = sysconf(_SC_PAGESIZE);
 	    vap->va_atime.tv_sec =
 	    vap->va_mtime.tv_sec =
-	    vap->va_ctime.tv_sec =
-	vap->va_birthtime.tv_sec = PUFFS_VNOVAL;
+	    vap->va_ctime.tv_sec = PUFFS_VNOVAL;
 	    vap->va_atime.tv_nsec =
 	    vap->va_mtime.tv_nsec =
-	    vap->va_ctime.tv_nsec =
-	vap->va_birthtime.tv_nsec = PUFFS_VNOVAL;
+	    vap->va_ctime.tv_nsec = PUFFS_VNOVAL;
 	vap->va_rmajor = PUFFS_VNOVAL;
 	vap->va_rminor = PUFFS_VNOVAL;
 	vap->va_bytes = (u_quad_t)PUFFS_VNOVAL;
@@ -282,7 +278,6 @@ puffs_stat2vattr(struct vattr *va, const struct stat *sb)
 	va->va_atime = sb->st_atimespec;
 	va->va_ctime = sb->st_ctimespec;
 	va->va_mtime = sb->st_mtimespec;
-	va->va_birthtime = sb->st_birthtimespec;
 	va->va_gen = sb->st_gen;
 	va->va_flags = sb->st_flags;
 	va->va_bytes = sb->st_blocks << DEV_BSHIFT;

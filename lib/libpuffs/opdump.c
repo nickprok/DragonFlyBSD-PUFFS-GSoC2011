@@ -383,17 +383,6 @@ dumpattr(struct vattr *vap)
 	mydprintf("c.ns: %s, ", buf);
 
 	DEFAULTBUF();
-	if (vap->va_birthtime.tv_sec != (time_t)PUFFS_VNOVAL)
-		snprintf(buf, sizeof(buf), "%lld",
-		    (long long)vap->va_birthtime.tv_sec);
-	mydprintf("b.s: %s, ", buf);
-
-	DEFAULTBUF();
-	if (vap->va_birthtime.tv_nsec != (long)PUFFS_VNOVAL)
-		snprintf(buf, sizeof(buf), "%ld", vap->va_birthtime.tv_nsec);
-	mydprintf("b.ns: %s\n", buf);
-
-	DEFAULTBUF();
 	if (vap->va_gen != (u_long)PUFFS_VNOVAL)
 		snprintf(buf, sizeof(buf), "%lu", vap->va_gen);
 	mydprintf(DINT DINT "gen: %s, ", buf);
