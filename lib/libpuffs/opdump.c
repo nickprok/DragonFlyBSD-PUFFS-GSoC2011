@@ -39,14 +39,21 @@ __RCSID("$NetBSD: opdump.c,v 1.35 2010/08/20 16:35:05 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
+#include <sys/namei.h>
 #include <sys/time.h>
 
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include "puffs.h"
 #include "puffsdump.h"
 #include "puffs_priv.h"
+
+#ifndef __arraycount
+#define __arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
+#endif
 
 #define DINT "    "
 
@@ -299,14 +306,13 @@ puffsdump_rv(struct puffs_req *preq)
 static void
 dumpattr(struct vattr *vap)
 {
-	const char * const vtypes[] = { VNODE_TYPES };
 	char buf[128];
 
 /* XXX: better readability.  and this is debug, so no cycle-sweat */
 #define DEFAULTBUF() snprintf(buf, sizeof(buf), "NOVAL")
 
 	mydprintf(DINT "vattr:\n");
-	mydprintf(DINT DINT "type: %s, ", vtypes[vap->va_type]);
+	mydprintf(DINT DINT "type: %d, ", vap->va_type);
 
 	DEFAULTBUF();
 	if (vap->va_mode != (mode_t)PUFFS_VNOVAL)
@@ -315,7 +321,7 @@ dumpattr(struct vattr *vap)
 
 	DEFAULTBUF();
 	if (vap->va_nlink != (nlink_t)PUFFS_VNOVAL)
-		snprintf(buf, sizeof(buf), "%d", vap->va_nlink);
+		snprintf(buf, sizeof(buf), "%ju", (uintmax_t)vap->va_nlink);
 	mydprintf("nlink: %s, ", buf);
 
 	DEFAULTBUF();
@@ -384,7 +390,7 @@ dumpattr(struct vattr *vap)
 
 	DEFAULTBUF();
 	if (vap->va_gen != (u_long)PUFFS_VNOVAL)
-		snprintf(buf, sizeof(buf), "%lu", vap->va_gen);
+		snprintf(buf, sizeof(buf), "%ju", (uintmax_t)vap->va_gen);
 	mydprintf(DINT DINT "gen: %s, ", buf);
 
 	DEFAULTBUF();
@@ -417,6 +423,10 @@ static const char *cn_opnames[] = {
 	"DELETE",
 	"RENAME"
 };
+
+#ifndef NAMEI_OPMASK
+#define NAMEI_OPMASK	3
+#endif
 
 void
 puffsdump_cn(struct puffs_kcn *pkcn)
