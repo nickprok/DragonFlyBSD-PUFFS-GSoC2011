@@ -394,21 +394,13 @@ puffs_null_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
 {
 	struct puffs_node *pn = opc;
 	int fd, rv;
-	int fflags;
 
 	rv = 0;
 	fd = writeableopen(PNPATH(pn));
 	if (fd == -1)
 		return errno;
 
-	if (how & PUFFS_FSYNC_DATAONLY)
-		fflags = FDATASYNC;
-	else
-		fflags = FFILESYNC;
-	if (how & PUFFS_FSYNC_CACHE)
-		fflags |= FDISKSYNC;
-
-	if (fsync_range(fd, fflags, offlo, offhi - offlo) == -1)
+	if (fsync(fd) == -1)
 		rv = errno;
 
 	close(fd);
