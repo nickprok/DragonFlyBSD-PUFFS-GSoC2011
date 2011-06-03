@@ -35,16 +35,22 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/ioccom.h>
+#include <sys/mount.h>
 #include <sys/uio.h>
+#include <sys/vfscache.h>
 #include <sys/vnode.h>
 #include <sys/ucred.h>
 #include <sys/statvfs.h>
 #include <sys/dirent.h>
 #include <sys/fcntl.h>
+#include <vm/vm.h>
 
-#include <dev/putter/putter.h>
+#include <dev/misc/putter/putter.h>
 
-#include <uvm/uvm_prot.h>
+#define _VFS_NAMELEN		MFSNAMELEN
+#define _VFS_MNAMELEN		MNAMELEN
+
+typedef off_t voff_t;
 
 #define PUFFSOP_VFS		0x01	/* kernel-> */
 #define PUFFSOP_VN		0x02	/* kernel-> */
@@ -237,7 +243,7 @@ struct puffs_flush {
  * if it makes a difference between these two and the super-user.
  */
 struct puffs_kcred {
-	struct uucred	pkcr_uuc;
+	struct xucred	pkcr_uuc;
 	uint8_t		pkcr_type;
 	uint8_t		pkcr_internal;
 };

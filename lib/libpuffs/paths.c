@@ -30,14 +30,13 @@
 __RCSID("$NetBSD: paths.c,v 1.8 2008/08/12 19:44:39 pooka Exp $");
 #endif /* !lint */
 
-#include <sys/hash.h>
-
 #include <assert.h>
 #include <errno.h>
 #include <puffs.h>
 #include <stdlib.h>
 
 #include "puffs_priv.h"
+#include "hash.h"
 
 /*
  * Generic routines for pathbuilding code

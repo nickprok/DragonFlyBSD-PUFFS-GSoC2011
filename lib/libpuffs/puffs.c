@@ -35,13 +35,14 @@ __RCSID("$NetBSD: puffs.c,v 1.116 2011/05/03 13:16:47 manu Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>
+#include <sys/event.h>
+#include <sys/filio.h>
 #include <sys/mount.h>
 
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <mntopts.h>
 #include <paths.h>
 #include <pthread.h>
 #include <puffs.h>
@@ -50,6 +51,8 @@ __RCSID("$NetBSD: puffs.c,v 1.116 2011/05/03 13:16:47 manu Exp $");
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+
+#include <vfs/puffs/puffs_msgif.h>
 
 #include "puffs_priv.h"
 

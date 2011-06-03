@@ -45,6 +45,10 @@ __RCSID("$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $");
 
 #include "puffs_priv.h"
 
+#ifndef MAXNAMLEN
+#define MAXNAMLEN	255
+#endif
+
 int
 puffs_gendotdent(struct dirent **dent, ino_t id, int dotdot, size_t *reslen)
 {

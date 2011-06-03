@@ -41,11 +41,17 @@
 #include <sys/time.h>
 #include <sys/vnode.h>
 
-#include <fs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_msgif.h>
 
 #include <mntopts.h>
 #include <stdbool.h>
 #include <string.h>
+
+typedef size_t vsize_t;
+
+/* XXXDF */
+#define _PATH_PUFFS	"/dev/putter"
+#define MOUNT_PUFFS	"puffs"         /* Pass-to-Userspace filesystem */
 
 /* forwards */
 struct puffs_cc;

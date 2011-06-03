@@ -29,7 +29,7 @@
 #define _PUFFS_PRIVATE_H_
 
 #include <sys/types.h>
-#include <fs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_msgif.h>
 
 #include <pthread.h>
 #include <puffs.h>

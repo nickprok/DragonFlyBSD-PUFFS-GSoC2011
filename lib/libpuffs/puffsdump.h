@@ -35,7 +35,7 @@
  * for debug builds.  Interfaces are not guaranteed to remain stable.
  */
 
-#include <fs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_msgif.h>
 
 void puffsdump_req(struct puffs_req *);
 void puffsdump_rv(struct puffs_req *);
