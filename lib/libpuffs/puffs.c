@@ -598,7 +598,7 @@ do {									\
 
 		pu->pu_kargp->pa_fd = pu->pu_fd = fd;
 		if ((rv = mount(MOUNT_PUFFS, rp, mntflags,
-		    pu->pu_kargp, sizeof(struct puffs_kargs))) == -1)
+		    pu->pu_kargp)) == -1)
 			goto out;
 	}
 
