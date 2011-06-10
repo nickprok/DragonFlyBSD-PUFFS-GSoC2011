@@ -30,6 +30,7 @@
  */
 
 #include <sys/param.h>
+#include <sys/kthread.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/objcache.h>
@@ -844,7 +845,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 			rv = EINVAL;
 			break;
 		}
-		cache_purge1(vp, NULL, PURGE_CHILDREN);
+		cache_purge(vp);
 		break;
 
 	case PUFFS_INVAL_PAGECACHE_NODE_RANGE:
@@ -997,11 +998,6 @@ puffs_sop_thread(void *arg)
 			unmountme = TRUE;
 			keeprunning = FALSE;
 
-			/*
-			 * We know the mountpoint is still alive because
-			 * the thread that is us (poetic?) is still alive.
-			 */
-			atomic_inc_uint((unsigned int*)&mp->mnt_refcnt);
 			break;
 		}
 
@@ -1032,11 +1028,10 @@ puffs_sop_thread(void *arg)
 	 * is eventually completed.
 	 */
 	if (unmountme) {
-		(void)dounmount(mp, MNT_FORCE, curlwp);
-		vfs_destroy(mp);
+		(void)dounmount(mp, MNT_FORCE);
 	}
 
-	kthread_exit(0);
+	kthread_exit();
 }
 
 int
@@ -1078,13 +1073,11 @@ puffs_msgif_close(void *this)
 	}
 
 	/* Won't access pmp from here anymore */
-	atomic_inc_uint((unsigned int*)&mp->mnt_refcnt);
 	puffs_mp_release(pmp);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	/* Detach from VFS. */
-	(void)dounmount(mp, MNT_FORCE, curlwp);
-	vfs_destroy(mp);
+	(void)dounmount(mp, MNT_FORCE);
 
 	return 0;
 }
