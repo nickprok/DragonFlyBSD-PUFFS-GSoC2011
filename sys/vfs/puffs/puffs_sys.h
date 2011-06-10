@@ -42,6 +42,7 @@
 
 #include <vfs/puffs/puffs_msgif.h>
 
+MALLOC_DECLARE(M_PUFFS);
 
 extern int (**puffs_vnodeop_p)(void *);
 extern int (**puffs_specop_p)(void *);
