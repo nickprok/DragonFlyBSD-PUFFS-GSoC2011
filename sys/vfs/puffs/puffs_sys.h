@@ -33,15 +33,15 @@
 #define _PUFFS_SYS_H_
 
 #include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/condvar.h>
+#include <sys/lock.h>
+#include <sys/malloc.h>
 #include <sys/select.h>
-#include <sys/kauth.h>
-#include <sys/mutex.h>
 #include <sys/queue.h>
-#include <sys/pool.h>
 
-#include <fs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_msgif.h>
 
-#include <miscfs/genfs/genfs_node.h>
 
 extern int (**puffs_vnodeop_p)(void *);
 extern int (**puffs_specop_p)(void *);

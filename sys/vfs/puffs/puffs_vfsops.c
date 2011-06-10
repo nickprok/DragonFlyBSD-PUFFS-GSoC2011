@@ -36,21 +36,14 @@
 #include <sys/queue.h>
 #include <sys/vnode.h>
 #include <sys/dirent.h>
-#include <sys/kauth.h>
 #include <sys/proc.h>
 #include <sys/module.h>
 #include <sys/kthread.h>
 
-#include <dev/putter/putter_sys.h>
+#include <dev/misc/putter/putter_sys.h>
 
-#include <miscfs/genfs/genfs.h>
-
-#include <fs/puffs/puffs_msgif.h>
-#include <fs/puffs/puffs_sys.h>
-
-#include <lib/libkern/libkern.h>
-
-#include <nfs/nfsproto.h> /* for fh sizes */
+#include <vfs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_sys.h>
 
 MODULE(MODULE_CLASS_VFS, puffs, "putter");
 

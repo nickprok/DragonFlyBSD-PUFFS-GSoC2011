@@ -31,13 +31,14 @@
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/malloc.h>
+#include <sys/kernel.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/poll.h>
 #include <sys/proc.h>
 
-#include <fs/puffs/puffs_msgif.h>
-#include <fs/puffs/puffs_sys.h>
+#include <vfs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_sys.h>
 
 #ifdef PUFFSDEBUG
 int puffsdebug;

@@ -30,23 +30,17 @@
  */
 
 #include <sys/param.h>
-#include <sys/atomic.h>
-#include <sys/kmem.h>
-#include <sys/kthread.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
-#include <sys/atomic.h>
 
-#include <dev/putter/putter_sys.h>
+#include <dev/misc/putter/putter_sys.h>
 
-#include <fs/puffs/puffs_msgif.h>
-#include <fs/puffs/puffs_sys.h>
-
-#include <miscfs/syncfs/syncfs.h> /* XXX: for syncer_mutex reference */
+#include <vfs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_sys.h>
 
 /*
  * waitq data structures

@@ -38,14 +38,8 @@
 #include <sys/vnode.h>
 #include <sys/proc.h>
 
-#include <uvm/uvm.h>
-
-#include <fs/puffs/puffs_msgif.h>
-#include <fs/puffs/puffs_sys.h>
-
-#include <miscfs/fifofs/fifo.h>
-#include <miscfs/genfs/genfs.h>
-#include <miscfs/specfs/specdev.h>
+#include <vfs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_sys.h>
 
 int	puffs_vnop_lookup(void *);
 int	puffs_vnop_create(void *);

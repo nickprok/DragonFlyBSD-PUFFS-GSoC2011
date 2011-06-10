@@ -30,18 +30,14 @@
  */
 
 #include <sys/param.h>
-#include <sys/hash.h>
-#include <sys/kmem.h>
+#include <sys/fnv_hash.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 
-#include <fs/puffs/puffs_msgif.h>
-#include <fs/puffs/puffs_sys.h>
-
-#include <miscfs/genfs/genfs_node.h>
-#include <miscfs/specfs/specdev.h>
+#include <vfs/puffs/puffs_msgif.h>
+#include <vfs/puffs/puffs_sys.h>
 
 static const struct genfs_ops puffs_genfsops = {
 	.gop_size = puffs_gop_size,
