@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 2006/10/22 22:43:23 pooka Exp $
 
-INCSDIR=	/usr/include/fs/puffs
+KMOD=	puffs
+SRCS=	puffs_msgif.c puffs_msgif.h puffs_node.c puffs_subr.c		\
+	puffs_sys.h puffs_vfsops.c puffs_vnops.c 
 
-INCS=		puffs_msgif.h
+DEBUG_FLAGS= -g -I${.CURDIR}/../..
 
-.include <bsd.kinc.mk>
+.include <bsd.kmod.mk>
