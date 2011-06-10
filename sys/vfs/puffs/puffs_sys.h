@@ -167,7 +167,6 @@ struct puffs_mount {
 	struct cv			pmp_sopcv;
 	int				pmp_sopthrcount;
 	TAILQ_HEAD(, puffs_sopreq)	pmp_sopreqs;
-	boolean_t			pmp_docompat;
 };
 
 #define PUFFSTAT_BEFOREINIT	0
@@ -264,9 +263,6 @@ void	puffs_gop_markupdate(struct vnode *, int);
 
 void	puffs_senderr(struct puffs_mount *, int, int, const char *,
 		      puffs_cookie_t);
-
-boolean_t puffs_compat_outgoing(struct puffs_req *, struct puffs_req**, ssize_t*);
-void	puffs_compat_incoming(struct puffs_req *, struct puffs_req *);
 
 void	puffs_updatenode(struct puffs_node *, int, voff_t);
 #define PUFFS_UPDATEATIME	0x01

@@ -283,7 +283,6 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	pmp->pmp_root_vtype = args->pa_root_vtype;
 	pmp->pmp_root_vsize = args->pa_root_vsize;
 	pmp->pmp_root_rdev = args->pa_root_rdev;
-	pmp->pmp_docompat = args->pa_time32;
 
 	lockinit(&pmp->pmp_lock, "puffs pmp_lock", 0, 0);
 	lockinit(&pmp->pmp_sopmtx, "puffs pmp_sopmtx", 0, 0);
