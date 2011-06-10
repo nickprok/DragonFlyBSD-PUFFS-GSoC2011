@@ -53,8 +53,6 @@ static __inline struct puffs_node_hashlist
 static struct puffs_node *puffs_cookie2pnode(struct puffs_mount *,
 					     puffs_cookie_t);
 
-struct pool puffs_pnpool;
-
 /*
  * Grab a vnode, intialize all the puffs-dependant stuff.
  */
@@ -125,8 +123,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		panic("puffs_getvnode: invalid vtype %d", type);
 	}
 
-	pnode = pool_get(&puffs_pnpool, PR_WAITOK);
-	memset(pnode, 0, sizeof(struct puffs_node));
+	pnode = kmalloc(sizeof(struct puffs_node), M_PUFFS, M_ZERO | M_WAITOK);
 
 	pnode->pn_cookie = ck;
 	pnode->pn_refcount = 1;
@@ -456,7 +453,7 @@ puffs_releasenode(struct puffs_node *pn)
 		lockmgr(&pn->pn_mtx, LK_RELEASE);
 		lockuninit(&pn->pn_mtx);
 		seldestroy(&pn->pn_sel);
-		pool_put(&puffs_pnpool, pn);
+		kfree(pn, M_PUFFS);
 	} else {
 		lockmgr(&pn->pn_mtx, LK_RELEASE);
 	}

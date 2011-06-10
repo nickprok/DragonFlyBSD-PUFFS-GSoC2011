@@ -53,8 +53,6 @@ extern const struct vnodeopv_desc puffs_specop_opv_desc;
 extern const struct vnodeopv_desc puffs_fifoop_opv_desc;
 extern const struct vnodeopv_desc puffs_msgop_opv_desc;
 
-extern struct pool puffs_pnpool;
-
 #ifdef DEBUG
 #ifndef PUFFSDEBUG
 #define PUFFSDEBUG

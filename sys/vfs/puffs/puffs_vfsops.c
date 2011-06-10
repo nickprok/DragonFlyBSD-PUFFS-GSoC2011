@@ -746,8 +746,6 @@ puffs_vfsop_init(void)
 	/* some checks depend on this */
 	KKASSERT(VNOVAL == VSIZENOTSET);
 
-	pool_init(&puffs_pnpool, sizeof(struct puffs_node), 0, 0, 0,
-	    "puffpnpl", &pool_allocator_nointr, IPL_NONE);
 	puffs_msgif_init();
 }
 
@@ -756,7 +754,6 @@ puffs_vfsop_done(void)
 {
 
 	puffs_msgif_destroy();
-	pool_destroy(&puffs_pnpool);
 }
 
 int
