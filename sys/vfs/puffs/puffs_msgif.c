@@ -165,10 +165,10 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 
 	if (refcnt == 0) {
 		if (preq)
-			kmem_free(preq, park->park_maxlen);
+			kfree(preq, M_PUFFS);
 #if 1
 		if (creq)
-			kmem_free(creq, park->park_creqlen);
+			kfree(creq, M_PUFFS);
 #endif
 		objcache_put(parkpc, park);
 
@@ -224,7 +224,7 @@ puffs_msgmem_alloc(size_t len, struct puffs_msgpark **ppark, void **mem,
 	struct puffs_msgpark *park;
 	void *m;
 
-	m = kmem_zalloc(len, cansleep ? KM_SLEEP : KM_NOSLEEP);
+	m = kmalloc(len, M_PUFFS, M_ZERO | (cansleep ? M_WAITOK : M_NOWAIT));
 	if (m == NULL) {
 		KKASSERT(cansleep == 0);
 		return ENOMEM;
@@ -233,7 +233,7 @@ puffs_msgmem_alloc(size_t len, struct puffs_msgpark **ppark, void **mem,
 	park = puffs_msgpark_alloc(cansleep);
 	if (park == NULL) {
 		KKASSERT(cansleep == 0);
-		kmem_free(m, len);
+		kfree(m, M_PUFFS);
 		return ENOMEM;
 	}
 
@@ -942,14 +942,14 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 		}
 		pf = (struct puffs_flush *)preq;
 
-		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
+		psopr = kmalloc(sizeof(*psopr), M_PUFFS, M_WAITOK);
 		memcpy(&psopr->psopr_pf, pf, sizeof(*pf));
 		psopr->psopr_sopreq = PUFFS_SOPREQ_FLUSH;
 
 		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
 			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
-			kmem_free(psopr, sizeof(*psopr));
+			kfree(psopr, M_PUFFS);
 			puffs_msg_sendresp(pmp, preq, ENXIO);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
@@ -965,14 +965,14 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 
 		DPRINTF(("dispatch: unmount 0x%x\n", preq->preq_optype));
 
-		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
+		psopr = kmalloc(sizeof(*psopr), M_PUFFS, M_WAITOK);
 		psopr->psopr_preq = *preq;
 		psopr->psopr_sopreq = PUFFS_SOPREQ_UNMOUNT;
 
 		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
 			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
-			kmem_free(psopr, sizeof(*psopr));
+			kfree(psopr, M_PUFFS);
 			puffs_msg_sendresp(pmp, preq, ENXIO);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
@@ -1036,7 +1036,7 @@ puffs_sop_thread(void *arg)
 			break;
 		}
 
-		kmem_free(psopr, sizeof(*psopr));
+		kfree(psopr, M_PUFFS);
 		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 	}
 
@@ -1047,7 +1047,7 @@ puffs_sop_thread(void *arg)
 		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
 		lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 		puffs_msg_sendresp(pmp, &psopr->psopr_preq, ENXIO);
-		kmem_free(psopr, sizeof(*psopr));
+		kfree(psopr, M_PUFFS);
 		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 	}
 

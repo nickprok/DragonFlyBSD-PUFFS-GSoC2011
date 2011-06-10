@@ -223,7 +223,7 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	copy_statvfs_info(&args->pa_svfsb, mp);
 	(void)memcpy(&mp->mnt_stat, &args->pa_svfsb, sizeof(mp->mnt_stat));
 
-	pmp = kmem_zalloc(sizeof(struct puffs_mount), KM_SLEEP);
+	pmp = kmalloc(sizeof(struct puffs_mount), M_PUFFS, M_ZERO | M_WAITOK);
 
 	mp->mnt_fs_bshift = DEV_BSHIFT;
 	mp->mnt_dev_bshift = DEV_BSHIFT;
@@ -261,8 +261,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	pmp->pmp_args = *args;
 
 	pmp->pmp_npnodehash = args->pa_nhashbuckets;
-	pmp->pmp_pnodehash = kmem_alloc(BUCKETALLOC(pmp->pmp_npnodehash),
-	    KM_SLEEP);
+	pmp->pmp_pnodehash = kmalloc(BUCKETALLOC(pmp->pmp_npnodehash),
+	    M_PUFFS, M_WAITOK);
 	for (i = 0; i < pmp->pmp_npnodehash; i++)
 		LIST_INIT(&pmp->pmp_pnodehash[i]);
 	LIST_INIT(&pmp->pmp_newcookie);
@@ -309,9 +309,9 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	if (error && pmp && pmp->pmp_pi)
 		putter_detach(pmp->pmp_pi);
 	if (error && pmp && pmp->pmp_pnodehash)
-		kmem_free(pmp->pmp_pnodehash, BUCKETALLOC(pmp->pmp_npnodehash));
+		kfree(pmp->pmp_pnodehash, M_PUFFS);
 	if (error && pmp)
-		kmem_free(pmp, sizeof(struct puffs_mount));
+		kfree(pmp, M_PUFFS);
 	return error;
 }
 
@@ -404,12 +404,12 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		 * Release kernel thread now that there is nothing
 		 * it would be wanting to lock.
 		 */
-		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
+		psopr = kmalloc(sizeof(*psopr), M_PUFFS, M_WAITOK);
 		psopr->psopr_sopreq = PUFFS_SOPREQSYS_EXIT;
 		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
 			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
-			kmem_free(psopr, sizeof(*psopr));
+			kfree(psopr, M_PUFFS);
 			lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 			KKASSERT(pmp->pmp_sopthrcount == 0);
 		} else {
@@ -429,8 +429,8 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		lockuninit(&pmp->pmp_lock);
 		lockuninit(&pmp->pmp_sopmtx);
 
-		kmem_free(pmp->pmp_pnodehash, BUCKETALLOC(pmp->pmp_npnodehash));
-		kmem_free(pmp, sizeof(struct puffs_mount));
+		kfree(pmp->pmp_pnodehash, M_PUFFS);
+		kfree(pmp, M_PUFFS);
 		error = 0;
 	} else {
 		lockmgr(&pmp->pmp_lock, LK_RELEASE);

@@ -2484,8 +2484,8 @@ puffs_vnop_getpages(void *v)
 #ifdef notnowjohn
 		/* allocate worst-case memory */
 		runsizes = ((npages / 2) + 1) * sizeof(struct puffs_cacherun);
-		pcinfo = kmem_zalloc(sizeof(struct puffs_cacheinfo) + runsize,
-		    locked ? KM_NOSLEEP : KM_SLEEP);
+		pcinfo = kmalloc(sizeof(struct puffs_cacheinfo) + runsize,
+		    M_PUFFS, M_ZERO | (locked ? KM_NOSLEEP : KM_SLEEP));
 
 		/*
 		 * can't block if we're locked and can't mess up caching
@@ -2558,8 +2558,7 @@ puffs_vnop_getpages(void *v)
  out:
 	if (error) {
 		if (pcinfo != NULL)
-			kmem_free(pcinfo,
-			    sizeof(struct puffs_cacheinfo) + runsizes);
+			kfree(pcinfo, M_PUFFS);
 #ifdef notnowjohn
 		if (parkmem != NULL)
 			puffs_park_release(parkmem, 1);

@@ -141,7 +141,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		LIST_FOREACH(pnc, &pmp->pmp_newcookie, pnc_entries) {
 			if (pnc->pnc_cookie == ck) {
 				LIST_REMOVE(pnc, pnc_entries);
-				kmem_free(pnc, sizeof(struct puffs_newcookie));
+				kfree(pnc, M_PUFFS);
 				break;
 			}
 		}
@@ -169,7 +169,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		LIST_FOREACH(pnc, &pmp->pmp_newcookie, pnc_entries) {
 			if (pnc->pnc_cookie == ck) {
 				LIST_REMOVE(pnc, pnc_entries);
-				kmem_free(pnc, sizeof(struct puffs_newcookie));
+				kfree(pnc, M_PUFFS);
 				break;
 			}
 		}
@@ -219,7 +219,7 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 			return EPROTO;
 		}
 	}
-	pnc = kmem_alloc(sizeof(struct puffs_newcookie), KM_SLEEP);
+	pnc = kmalloc(sizeof(struct puffs_newcookie), M_PUFFS, M_WAITOK);
 	pnc->pnc_cookie = ck;
 	LIST_INSERT_HEAD(&pmp->pmp_newcookie, pnc, pnc_entries);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
@@ -378,8 +378,8 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 	pnode = puffs_cookie2pnode(pmp, ck);
 	if (pnode == NULL) {
 		if (willcreate) {
-			pnc = kmem_alloc(sizeof(struct puffs_newcookie),
-			    KM_SLEEP);
+			pnc = kmalloc(sizeof(struct puffs_newcookie),
+			    M_PUFFS, M_WAITOK);
 			pnc->pnc_cookie = ck;
 			LIST_INSERT_HEAD(&pmp->pmp_newcookie, pnc, pnc_entries);
 		}
