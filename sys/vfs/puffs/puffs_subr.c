@@ -40,6 +40,8 @@
 #include <vfs/puffs/puffs_msgif.h>
 #include <vfs/puffs/puffs_sys.h>
 
+MALLOC_DEFINE(M_PUFFS, "puffs", "PUFFS");
+
 #ifdef PUFFSDEBUG
 int puffsdebug;
 #endif
@@ -68,7 +70,7 @@ puffs_makecn(struct puffs_kcn *pkcn, struct puffs_kcred *pkcr,
  * Convert given credentials to struct puffs_kcred for userspace.
  */
 void
-puffs_credcvt(struct puffs_kcred *pkcr, const kauth_cred_t cred)
+puffs_credcvt(struct puffs_kcred *pkcr, struct ucred *cred)
 {
 
 	memset(pkcr, 0, sizeof(struct puffs_kcred));
@@ -81,7 +83,7 @@ puffs_credcvt(struct puffs_kcred *pkcr, const kauth_cred_t cred)
 			pkcr->pkcr_internal = PUFFCRED_CRED_FSCRED;
  	} else {
 		pkcr->pkcr_type = PUFFCRED_TYPE_UUC;
-		kauth_cred_to_uucred(&pkcr->pkcr_uuc, cred);
+		cru2x(cred, &pkcr->pkcr_uuc);
 	}
 }
 
@@ -109,7 +111,7 @@ puffs_parkdone_asyncbioread(struct puffs_mount *pmp,
 		}
 	}
 
-	biodone(bp);
+	bpdone(bp, 0);
 }
 
 void
@@ -132,7 +134,7 @@ puffs_parkdone_asyncbiowrite(struct puffs_mount *pmp,
 		}
 	}
 
-	biodone(bp);
+	bpdone(bp, 0);
 }
 
 /* XXX: userspace can leak kernel resources */
