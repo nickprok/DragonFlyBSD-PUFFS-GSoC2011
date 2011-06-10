@@ -32,6 +32,7 @@
 #include <sys/param.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
+#include <sys/objcache.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
@@ -78,24 +79,24 @@ struct puffs_msgpark {
 #define PARKFLAG_WANTREPLY	0x20
 #define	PARKFLAG_HASERROR	0x40
 
-static pool_cache_t parkpc;
+static struct objcache *parkpc;
 #ifdef PUFFSDEBUG
 static int totalpark;
 #endif
 
-static int
-makepark(void *arg, void *obj, int flags)
+static boolean_t
+makepark(void *obj, void *privdata, int flags)
 {
 	struct puffs_msgpark *park = obj;
 
 	mutex_init(&park->park_mtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&park->park_cv, "puffsrpl");
 
-	return 0;
+	return TRUE;
 }
 
 static void
-nukepark(void *arg, void *obj)
+nukepark(void *obj, void *privdata)
 {
 	struct puffs_msgpark *park = obj;
 
@@ -107,15 +108,15 @@ void
 puffs_msgif_init(void)
 {
 
-	parkpc = pool_cache_init(sizeof(struct puffs_msgpark), 0, 0, 0,
-	    "puffprkl", NULL, IPL_NONE, makepark, nukepark, NULL);
+	parkpc = objcache_create_mbacked(M_PUFFS, sizeof(struct puffs_msgpark),
+	    NULL, 0, makepark, nukepark, NULL);
 }
 
 void
 puffs_msgif_destroy(void)
 {
 
-	pool_cache_destroy(parkpc);
+	objcache_destroy(parkpc);
 }
 
 static struct puffs_msgpark *
@@ -123,7 +124,7 @@ puffs_msgpark_alloc(int waitok)
 {
 	struct puffs_msgpark *park;
 
-	park = pool_cache_get(parkpc, waitok ? PR_WAITOK : PR_NOWAIT);
+	park = objcache_get(parkpc, waitok ? M_WAITOK : M_NOWAIT);
 	if (park == NULL)
 		return park;
 
@@ -169,7 +170,7 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 		if (creq)
 			kmem_free(creq, park->park_creqlen);
 #endif
-		pool_cache_put(parkpc, park);
+		objcache_put(parkpc, park);
 
 #ifdef PUFFSDEBUG
 		totalpark--;
