@@ -188,8 +188,6 @@ struct puffs_mount {
 #define PNODE_METACACHE_MASK	0xf0
 
 struct puffs_node {
-	struct genfs_node pn_gnode;	/* genfs glue			*/
-
 	kmutex_t	pn_mtx;
 	int		pn_refcount;
 
@@ -250,7 +248,7 @@ int	puffs_cookie2vnode(struct puffs_mount *, puffs_cookie_t, int, int,
 			   struct vnode **);
 void	puffs_makecn(struct puffs_kcn *, struct puffs_kcred *,
 		     const struct componentname *, int);
-void	puffs_credcvt(struct puffs_kcred *, kauth_cred_t);
+void	puffs_credcvt(struct puffs_kcred *, struct ucred *);
 
 void	puffs_parkdone_asyncbioread(struct puffs_mount *,
 				    struct puffs_req *, void *);
@@ -277,8 +275,6 @@ void	puffs_updatenode(struct puffs_node *, int, voff_t);
 #define PUFFS_UPDATESIZE	0x08
 
 void	puffs_userdead(struct puffs_mount *);
-
-extern int (**puffs_vnodeop_p)(void *);
 
 /* for putter */
 int	puffs_msgif_getout(void *, size_t, int, uint8_t **, size_t *, void **);
