@@ -1087,7 +1087,7 @@ puffs_vnop_reclaim(void *v)
 	 */
 	if (vp->v_vflag & VV_ROOT) {
 		mutex_enter(&pmp->pmp_lock);
-		KASSERT(pmp->pmp_root != NULL);
+		KKASSERT(pmp->pmp_root != NULL);
 		pmp->pmp_root = NULL;
 		mutex_exit(&pmp->pmp_lock);
 		notifyserver = false;
@@ -1150,10 +1150,10 @@ puffs_vnop_readdir(void *v)
 	 *
 	 * (yes, I'm very afraid of this)
 	 */
-	KASSERT(CSIZE <= _DIRENT_MINSIZE((struct dirent *)0));
+	KKASSERT(CSIZE <= _DIRENT_MINSIZE((struct dirent *)0));
 
 	if (ap->a_cookies) {
-		KASSERT(ap->a_ncookies != NULL);
+		KKASSERT(ap->a_ncookies != NULL);
 		if (pmp->pmp_args.pa_fhsize == 0)
 			return EOPNOTSUPP;
 		resid = PUFFS_TOMOVE(uio->uio_resid, pmp) / 2;
@@ -2195,7 +2195,7 @@ puffs_vnop_strategy(void *v)
 	 * VOP_INACTIVE and VOP_RECLAIM in case the node has no references.
 	 */
 	if (pn->pn_stat & PNODE_DYING) {
-		KASSERT(BUF_ISWRITE(bp));
+		KKASSERT(BUF_ISWRITE(bp));
 		bp->b_resid = 0;
 		goto out;
 	}
@@ -2223,7 +2223,7 @@ puffs_vnop_strategy(void *v)
 
 #ifdef DIAGNOSTIC
 		if (curlwp == uvm.pagedaemon_lwp)
-			KASSERT(dofaf || BIOASYNC(bp));
+			KKASSERT(dofaf || BIOASYNC(bp));
 #endif
 
 	/* allocate transport structure */
@@ -2552,7 +2552,7 @@ puffs_vnop_getpages(void *v)
 	if (!locked)
 		mutex_exit(&vp->v_uobj.vmobjlock);
 
-	KASSERT(si <= (npages / 2) + 1);
+	KKASSERT(si <= (npages / 2) + 1);
 
 #ifdef notnowjohn
 	/* send results to userspace */

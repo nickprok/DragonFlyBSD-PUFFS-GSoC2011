@@ -161,7 +161,7 @@ void
 puffs_mp_reference(struct puffs_mount *pmp)
 {
 
-	KASSERT(mutex_owned(&pmp->pmp_lock));
+	KKASSERT(mutex_owned(&pmp->pmp_lock));
 	pmp->pmp_refcount++;
 }
 
@@ -169,7 +169,7 @@ void
 puffs_mp_release(struct puffs_mount *pmp)
 {
 
-	KASSERT(mutex_owned(&pmp->pmp_lock));
+	KKASSERT(mutex_owned(&pmp->pmp_lock));
 	if (--pmp->pmp_refcount == 0)
 		cv_broadcast(&pmp->pmp_refcount_cv);
 }

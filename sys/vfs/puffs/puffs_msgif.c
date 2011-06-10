@@ -148,7 +148,7 @@ static void
 puffs_msgpark_reference(struct puffs_msgpark *park)
 {
 
-	KASSERT(mutex_owned(&park->park_mtx));
+	KKASSERT(mutex_owned(&park->park_mtx));
 	park->park_refcount++;
 }
 
@@ -162,11 +162,11 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 	struct puffs_req *creq = park->park_creq;
 	int refcnt;
 
-	KASSERT(mutex_owned(&park->park_mtx));
+	KKASSERT(mutex_owned(&park->park_mtx));
 	refcnt = park->park_refcount -= howmany;
 	mutex_exit(&park->park_mtx);
 
-	KASSERT(refcnt >= 0);
+	KKASSERT(refcnt >= 0);
 
 	if (refcnt == 0) {
 		if (preq)
@@ -231,13 +231,13 @@ puffs_msgmem_alloc(size_t len, struct puffs_msgpark **ppark, void **mem,
 
 	m = kmem_zalloc(len, cansleep ? KM_SLEEP : KM_NOSLEEP);
 	if (m == NULL) {
-		KASSERT(cansleep == 0);
+		KKASSERT(cansleep == 0);
 		return ENOMEM;
 	}
 
 	park = puffs_msgpark_alloc(cansleep);
 	if (park == NULL) {
-		KASSERT(cansleep == 0);
+		KKASSERT(cansleep == 0);
 		kmem_free(m, len);
 		return ENOMEM;
 	}
@@ -266,7 +266,7 @@ void
 puffs_msg_setfaf(struct puffs_msgpark *park)
 {
 
-	KASSERT((park->park_flags & PARKFLAG_CALL) == 0);
+	KKASSERT((park->park_flags & PARKFLAG_CALL) == 0);
 	park->park_flags &= ~PARKFLAG_WANTREPLY;
 }
 
@@ -274,7 +274,7 @@ void
 puffs_msg_setdelta(struct puffs_msgpark *park, size_t delta)
 {
 
-	KASSERT(delta < park->park_maxlen); /* "<=" wouldn't make sense */
+	KKASSERT(delta < park->park_maxlen); /* "<=" wouldn't make sense */
 	park->park_copylen = park->park_maxlen - delta;
 }
 
@@ -292,7 +292,7 @@ void
 puffs_msg_setcall(struct puffs_msgpark *park, parkdone_fn donefn, void *donearg)
 {
 
-	KASSERT(park->park_flags & PARKFLAG_WANTREPLY);
+	KKASSERT(park->park_flags & PARKFLAG_WANTREPLY);
 	park->park_done = donefn;
 	park->park_donearg = donearg;
 	park->park_flags |= PARKFLAG_CALL;
@@ -335,7 +335,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	 * a few more invariant checks here, but this will do for now.
 	 */
 	park->park_flags &= ~(PARKFLAG_DONE | PARKFLAG_HASERROR);
-	KASSERT((park->park_flags & PARKFLAG_WAITERGONE) == 0);
+	KKASSERT((park->park_flags & PARKFLAG_WAITERGONE) == 0);
 
 	mp = PMPTOMP(pmp);
 	preq = park->park_preq;
@@ -353,7 +353,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 #endif
 
 	preq->preq_buflen = park->park_maxlen;
-	KASSERT(preq->preq_id == 0
+	KKASSERT(preq->preq_id == 0
 	    || (preq->preq_opclass & PUFFSOPFLAG_ISRESPONSE));
 
 	if ((park->park_flags & PARKFLAG_WANTREPLY) == 0)
@@ -675,12 +675,12 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		 * this baby on the receiving queue.
 		 */
 		TAILQ_REMOVE(&pmp->pmp_msg_touser, park, park_entries);
-		KASSERT(park->park_flags & PARKFLAG_ONQUEUE1);
+		KKASSERT(park->park_flags & PARKFLAG_ONQUEUE1);
 		park->park_flags &= ~PARKFLAG_ONQUEUE1;
 		mutex_exit(&park->park_mtx);
 
 		pmp->pmp_msg_touser_count--;
-		KASSERT(pmp->pmp_msg_touser_count >= 0);
+		KKASSERT(pmp->pmp_msg_touser_count >= 0);
 
 		break;
 	}
@@ -784,7 +784,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	}
 	wgone = park->park_flags & PARKFLAG_WAITERGONE;
 
-	KASSERT(park->park_flags & PARKFLAG_ONQUEUE2);
+	KKASSERT(park->park_flags & PARKFLAG_ONQUEUE2);
 	TAILQ_REMOVE(&pmp->pmp_msg_replywait, park, park_entries);
 	park->park_flags &= ~PARKFLAG_ONQUEUE2;
 	mutex_exit(&pmp->pmp_lock);
@@ -798,7 +798,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 			struct puffs_req *creq;
 			size_t csize;
 
-			KASSERT(pmp->pmp_docompat);
+			KKASSERT(pmp->pmp_docompat);
 			puffs_compat_incoming(preq, park->park_creq);
 			creq = park->park_creq;
 			csize = park->park_creqlen;
@@ -838,7 +838,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 	voff_t offlo, offhi;
 	int rv, flags = 0;
 
-	KASSERT(pf->pf_req.preq_pth.pth_framelen == sizeof(struct puffs_flush));
+	KKASSERT(pf->pf_req.preq_pth.pth_framelen == sizeof(struct puffs_flush));
 
 	/* XXX: slurry */
 	if (pf->pf_op == PUFFS_INVAL_NAMECACHE_ALL) {
@@ -1151,7 +1151,7 @@ puffs_userdead(struct puffs_mount *pmp)
 		puffs_msgpark_reference(park);
 		park_next = TAILQ_NEXT(park, park_entries);
 
-		KASSERT(park->park_flags & PARKFLAG_ONQUEUE1);
+		KKASSERT(park->park_flags & PARKFLAG_ONQUEUE1);
 		TAILQ_REMOVE(&pmp->pmp_msg_touser, park, park_entries);
 		park->park_flags &= ~PARKFLAG_ONQUEUE1;
 		pmp->pmp_msg_touser_count--;
@@ -1164,8 +1164,8 @@ puffs_userdead(struct puffs_mount *pmp)
 		 * on the queue and move on to the next one.
 		 */
 		if (park->park_flags & PARKFLAG_WAITERGONE) {
-			KASSERT((park->park_flags & PARKFLAG_CALL) == 0);
-			KASSERT(park->park_flags & PARKFLAG_WANTREPLY);
+			KKASSERT((park->park_flags & PARKFLAG_CALL) == 0);
+			KKASSERT(park->park_flags & PARKFLAG_WANTREPLY);
 			puffs_msgpark_release(park);
 
 		} else {
@@ -1192,14 +1192,14 @@ puffs_userdead(struct puffs_mount *pmp)
 		puffs_msgpark_reference(park);
 		park_next = TAILQ_NEXT(park, park_entries);
 
-		KASSERT(park->park_flags & PARKFLAG_ONQUEUE2);
-		KASSERT(park->park_flags & PARKFLAG_WANTREPLY);
+		KKASSERT(park->park_flags & PARKFLAG_ONQUEUE2);
+		KKASSERT(park->park_flags & PARKFLAG_WANTREPLY);
 
 		TAILQ_REMOVE(&pmp->pmp_msg_replywait, park, park_entries);
 		park->park_flags &= ~PARKFLAG_ONQUEUE2;
 
 		if (park->park_flags & PARKFLAG_WAITERGONE) {
-			KASSERT((park->park_flags & PARKFLAG_CALL) == 0);
+			KKASSERT((park->park_flags & PARKFLAG_CALL) == 0);
 			puffs_msgpark_release(park);
 		} else {
 			park->park_preq->preq_rv = ENXIO;

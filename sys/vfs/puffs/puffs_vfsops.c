@@ -327,7 +327,7 @@ puffs_vfsop_start(struct mount *mp, int flags)
 {
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 
-	KASSERT(pmp->pmp_status == PUFFSTAT_MOUNTING);
+	KKASSERT(pmp->pmp_status == PUFFSTAT_MOUNTING);
 	pmp->pmp_status = PUFFSTAT_RUNNING;
 
 	return 0;
@@ -418,7 +418,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 			mutex_exit(&pmp->pmp_sopmtx);
 			kmem_free(psopr, sizeof(*psopr));
 			mutex_enter(&pmp->pmp_sopmtx);
-			KASSERT(pmp->pmp_sopthrcount == 0);
+			KKASSERT(pmp->pmp_sopthrcount == 0);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
 			    psopr, psopr_entries);
@@ -458,7 +458,7 @@ puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 	int rv;
 
 	rv = puffs_cookie2vnode(pmp, pmp->pmp_root_cookie, 1, 1, vpp);
-	KASSERT(rv != PUFFS_NOSUCHCOOKIE);
+	KKASSERT(rv != PUFFS_NOSUCHCOOKIE);
 	return rv;
 }
 
@@ -752,7 +752,7 @@ puffs_vfsop_init(void)
 {
 
 	/* some checks depend on this */
-	KASSERT(VNOVAL == VSIZENOTSET);
+	KKASSERT(VNOVAL == VSIZENOTSET);
 
 	pool_init(&puffs_pnpool, sizeof(struct puffs_node), 0, 0, 0,
 	    "puffpnpl", &pool_allocator_nointr, IPL_NONE);

@@ -149,7 +149,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 				break;
 			}
 		}
-		KASSERT(pnc != NULL);
+		KKASSERT(pnc != NULL);
 	}
 	mutex_exit(&pmp->pmp_lock);
 
@@ -177,7 +177,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 				break;
 			}
 		}
-		KASSERT(pnc != NULL);
+		KKASSERT(pnc != NULL);
 		mutex_exit(&pmp->pmp_lock);
 	}
 
@@ -440,7 +440,7 @@ void
 puffs_referencenode(struct puffs_node *pn)
 {
 
-	KASSERT(mutex_owned(&pn->pn_mtx));
+	KKASSERT(mutex_owned(&pn->pn_mtx));
 	pn->pn_refcount++;
 }
 
