@@ -29,9 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.17 2010/07/25 10:03:59 hannken Exp $");
-
 #include <sys/param.h>
 #include <sys/hash.h>
 #include <sys/kmem.h>

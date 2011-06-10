@@ -28,9 +28,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_subr.c,v 1.66 2008/11/16 19:34:30 pooka Exp $");
-
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/malloc.h>

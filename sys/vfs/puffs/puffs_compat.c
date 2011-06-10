@@ -31,9 +31,6 @@
  * against a 5.0 userland (assuming the protocol otherwise matches!).
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_compat.c,v 1.2 2010/07/11 11:17:27 pooka Exp $");
-
 #include <sys/param.h>
 #include <sys/atomic.h>
 #include <sys/kmem.h>

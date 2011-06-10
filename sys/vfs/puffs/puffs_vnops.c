@@ -29,9 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vnops.c,v 1.151 2011/05/03 13:16:47 manu Exp $");
-
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/lockf.h>

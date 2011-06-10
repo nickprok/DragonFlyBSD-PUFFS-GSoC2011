@@ -29,9 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.95 2010/07/21 17:52:10 hannken Exp $");
-
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>

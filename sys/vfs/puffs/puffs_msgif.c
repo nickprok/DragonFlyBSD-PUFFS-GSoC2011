@@ -29,9 +29,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.85 2011/02/11 09:15:45 yamt Exp $");
-
 #include <sys/param.h>
 #include <sys/atomic.h>
 #include <sys/kmem.h>
