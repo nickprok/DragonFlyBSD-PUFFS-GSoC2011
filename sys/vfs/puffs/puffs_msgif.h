@@ -51,6 +51,7 @@
 #define _VFS_MNAMELEN		MNAMELEN
 
 typedef off_t voff_t;
+typedef off_t vsize_t;
 
 #define PUFFSOP_VFS		0x01	/* kernel-> */
 #define PUFFSOP_VN		0x02	/* kernel-> */
