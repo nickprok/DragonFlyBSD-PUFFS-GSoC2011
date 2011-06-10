@@ -1004,11 +1004,11 @@ puffs_sop_thread(void *arg)
 	struct puffs_mount *pmp = arg;
 	struct mount *mp = PMPTOMP(pmp);
 	struct puffs_sopreq *psopr;
-	bool keeprunning;
-	bool unmountme = false;
+	boolean_t keeprunning;
+	boolean_t unmountme = FALSE;
 
 	mutex_enter(&pmp->pmp_sopmtx);
-	for (keeprunning = true; keeprunning; ) {
+	for (keeprunning = TRUE; keeprunning; ) {
 		while ((psopr = TAILQ_FIRST(&pmp->pmp_sopreqs)) == NULL)
 			cv_wait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx);
 		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
@@ -1016,7 +1016,7 @@ puffs_sop_thread(void *arg)
 
 		switch (psopr->psopr_sopreq) {
 		case PUFFS_SOPREQSYS_EXIT:
-			keeprunning = false;
+			keeprunning = FALSE;
 			break;
 		case PUFFS_SOPREQ_FLUSH:
 			puffsop_flush(pmp, &psopr->psopr_pf);
@@ -1024,8 +1024,8 @@ puffs_sop_thread(void *arg)
 		case PUFFS_SOPREQ_UNMOUNT:
 			puffs_msg_sendresp(pmp, &psopr->psopr_preq, 0);
 
-			unmountme = true;
-			keeprunning = false;
+			unmountme = TRUE;
+			keeprunning = FALSE;
 
 			/*
 			 * We know the mountpoint is still alive because

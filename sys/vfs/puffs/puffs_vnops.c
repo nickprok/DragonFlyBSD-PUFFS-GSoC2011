@@ -400,7 +400,7 @@ static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
-static int  flushvncache(struct vnode *, off_t, off_t, bool);
+static int  flushvncache(struct vnode *, off_t, off_t, boolean_t);
 
 
 #define PUFFS_ABORT_LOOKUP	1
@@ -1016,7 +1016,7 @@ puffs_vnop_inactive(void *v)
 	pnode = vp->v_data;
 
 	if (doinact(pmp, pnode->pn_stat & PNODE_DOINACT)) {
-		flushvncache(vp, 0, 0, false);
+		flushvncache(vp, 0, 0, FALSE);
 		PUFFS_MSG_ALLOC(vn, inactive);
 		puffs_msg_setinfo(park_inactive, PUFFSOP_VN,
 		    PUFFS_VN_INACTIVE, VPTOPNC(vp));
@@ -1033,7 +1033,7 @@ puffs_vnop_inactive(void *v)
 	 */
 	if (pnode->pn_stat & PNODE_NOREFS) {
 		pnode->pn_stat |= PNODE_DYING;
-		*ap->a_recycle = true;
+		*ap->a_recycle = TRUE;
 	}
 
 	VOP_UNLOCK(vp);
@@ -1071,7 +1071,7 @@ puffs_vnop_reclaim(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pnode = vp->v_data;
-	bool notifyserver = true;
+	boolean_t notifyserver = TRUE;
 
 	/*
 	 * first things first: check if someone is trying to reclaim the
@@ -1084,7 +1084,7 @@ puffs_vnop_reclaim(void *v)
 		KKASSERT(pmp->pmp_root != NULL);
 		pmp->pmp_root = NULL;
 		mutex_exit(&pmp->pmp_lock);
-		notifyserver = false;
+		notifyserver = FALSE;
 	}
 
 	/*
@@ -1281,7 +1281,7 @@ puffs_vnop_poll(void *v)
 }
 
 static int
-flushvncache(struct vnode *vp, off_t offlo, off_t offhi, bool wait)
+flushvncache(struct vnode *vp, off_t offlo, off_t offhi, boolean_t wait)
 {
 	struct puffs_node *pn = VPTOPP(vp);
 	struct vattr va;
@@ -1722,7 +1722,7 @@ puffs_vnop_rename(void *v)
 	struct puffs_node *fpn = ap->a_fvp->v_data;
 	struct puffs_mount *pmp = MPTOPUFFSMP(fdvp->v_mount);
 	int error;
-	bool doabort = true;
+	boolean_t doabort = TRUE;
 
 	if ((fvp->v_mount != tdvp->v_mount) ||
 	    (tvp && (fvp->v_mount != tvp->v_mount))) {
@@ -1744,7 +1744,7 @@ puffs_vnop_rename(void *v)
 	    PUFFS_VN_RENAME, VPTOPNC(fdvp));
 
 	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_rename, fdvp->v_data, NULL, error);
-	doabort = false;
+	doabort = FALSE;
 	PUFFS_MSG_RELEASE(rename);
 	error = checkerr(pmp, error, __func__);
 
