@@ -120,7 +120,7 @@ struct puffs_sopreq {
 TAILQ_HEAD(puffs_wq, puffs_msgpark);
 LIST_HEAD(puffs_node_hashlist, puffs_node);
 struct puffs_mount {
-	kmutex_t	 		pmp_lock;
+	struct lock	 		pmp_lock;
 
 	struct puffs_kargs		pmp_args;
 #define pmp_flags pmp_args.pa_flags
@@ -128,7 +128,7 @@ struct puffs_mount {
 
 	struct puffs_wq			pmp_msg_touser;
 	int				pmp_msg_touser_count;
-	kcondvar_t			pmp_msg_waiter_cv;
+	struct cv			pmp_msg_waiter_cv;
 	size_t				pmp_msg_maxsize;
 
 	struct puffs_wq			pmp_msg_replywait;
@@ -149,9 +149,9 @@ struct puffs_mount {
 	struct putter_instance		*pmp_pi;
 
 	unsigned int			pmp_refcount;
-	kcondvar_t			pmp_refcount_cv;
+	struct cv			pmp_refcount_cv;
 
-	kcondvar_t			pmp_unmounting_cv;
+	struct cv			pmp_unmounting_cv;
 	uint8_t				pmp_unmounting;
 
 	uint8_t				pmp_status;
@@ -163,8 +163,8 @@ struct puffs_mount {
 
 	uint64_t			pmp_nextmsgid;
 
-	kmutex_t			pmp_sopmtx;
-	kcondvar_t			pmp_sopcv;
+	struct lock			pmp_sopmtx;
+	struct cv			pmp_sopcv;
 	int				pmp_sopthrcount;
 	TAILQ_HEAD(, puffs_sopreq)	pmp_sopreqs;
 	boolean_t			pmp_docompat;
@@ -188,7 +188,7 @@ struct puffs_mount {
 #define PNODE_METACACHE_MASK	0xf0
 
 struct puffs_node {
-	kmutex_t	pn_mtx;
+	struct lock	pn_mtx;
 	int		pn_refcount;
 
 	puffs_cookie_t	pn_cookie;	/* userspace pnode cookie	*/

@@ -595,17 +595,17 @@ puffs_vnop_lookup(void *v)
 
 #define REFPN_AND_UNLOCKVP(a, b)					\
 do {									\
-	mutex_enter(&b->pn_mtx);					\
+	lockmgr(&b->pn_mtx, LK_EXCLUSIVE);				\
 	puffs_referencenode(b);						\
-	mutex_exit(&b->pn_mtx);						\
+	lockmgr(&b->pn_mtx, LK_RELEASE);				\
 	VOP_UNLOCK(a);						\
 } while (/*CONSTCOND*/0)
 
 #define REFPN(b)							\
 do {									\
-	mutex_enter(&b->pn_mtx);					\
+	lockmgr(&b->pn_mtx, LK_EXCLUSIVE);				\
 	puffs_referencenode(b);						\
-	mutex_exit(&b->pn_mtx);						\
+	lockmgr(&b->pn_mtx, LK_RELEASE);				\
 } while (/*CONSTCOND*/0)
 
 #define RELEPN_AND_VP(a, b)						\
@@ -1080,10 +1080,10 @@ puffs_vnop_reclaim(void *v)
 	 * puffs_root(), since there is only one of us.
 	 */
 	if (vp->v_vflag & VV_ROOT) {
-		mutex_enter(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 		KKASSERT(pmp->pmp_root != NULL);
 		pmp->pmp_root = NULL;
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		notifyserver = FALSE;
 	}
 
@@ -1092,9 +1092,9 @@ puffs_vnop_reclaim(void *v)
 	 * don't really know when we'll get around to it after
 	 * that and someone might race us into node creation
 	 */
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	LIST_REMOVE(pnode, pn_hashent);
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 	if (PUFFS_USE_NAMECACHE(pmp))
 		cache_purge(vp);
 
@@ -1251,16 +1251,16 @@ puffs_vnop_poll(void *v)
 	int events, error;
 
 	if (EXISTSOP(pmp, POLL)) {
-		mutex_enter(&pn->pn_mtx);
+		lockmgr(&pn->pn_mtx, LK_EXCLUSIVE);
 		events = pn->pn_revents & ap->a_events;
 		if (events & ap->a_events) {
 			pn->pn_revents &= ~ap->a_events;
-			mutex_exit(&pn->pn_mtx);
+			lockmgr(&pn->pn_mtx, LK_RELEASE);
 
 			return events;
 		} else {
 			puffs_referencenode(pn);
-			mutex_exit(&pn->pn_mtx);
+			lockmgr(&pn->pn_mtx, LK_RELEASE);
 
 			PUFFS_MSG_ALLOC(vn, poll);
 			poll_msg->pvnr_events = ap->a_events;
@@ -1303,7 +1303,7 @@ flushvncache(struct vnode *vp, off_t offlo, off_t offhi, boolean_t wait)
 	pflags = PGO_CLEANIT;
 	if (wait)
 		pflags |= PGO_SYNCIO;
-	mutex_enter(&vp->v_interlock);
+	lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 	return VOP_PUTPAGES(vp, trunc_page(offlo), round_page(offhi), pflags);
 }
 
@@ -1347,10 +1347,10 @@ puffs_vnop_fsync(void *v)
 	 * vnode to be reclaimed from the freelist for this fs.
 	 */
 	if (dofaf == 0) {
-		mutex_enter(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 		if (vp->v_iflag & VI_XLOCK)
 			dofaf = 1;
-		mutex_exit(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_RELEASE);
 	}
 
 	PUFFS_MSG_ALLOC(vn, fsync);
@@ -1957,7 +1957,7 @@ puffs_vnop_write(void *v)
 			 * that gives userland too much say in the kernel.
 			 */
 			if (oldoff >> 16 != uio->uio_offset >> 16) {
-				mutex_enter(&vp->v_interlock);
+				lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 				error = VOP_PUTPAGES(vp, oldoff & ~0xffff,
 				    uio->uio_offset & ~0xffff,
 				    PGO_CLEANIT | PGO_SYNCIO);
@@ -1968,14 +1968,14 @@ puffs_vnop_write(void *v)
 
 		/* synchronous I/O? */
 		if (error == 0 && ap->a_ioflag & IO_SYNC) {
-			mutex_enter(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 			error = VOP_PUTPAGES(vp, trunc_page(origoff),
 			    round_page(uio->uio_offset),
 			    PGO_CLEANIT | PGO_SYNCIO);
 
 		/* write through page cache? */
 		} else if (error == 0 && pmp->pmp_flags & PUFFS_KFLAG_WTCACHE) {
-			mutex_enter(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 			error = VOP_PUTPAGES(vp, trunc_page(origoff),
 			    round_page(uio->uio_offset), PGO_CLEANIT);
 		}
@@ -2207,12 +2207,12 @@ puffs_vnop_strategy(void *v)
 	 * See puffs_vfsops.c:pageflush()
 	 */
 	if (BUF_ISWRITE(bp)) {
-		mutex_enter(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 		if (vp->v_iflag & VI_XLOCK)
 			dofaf = 1;
 		if (pn->pn_stat & PNODE_FAF)
 			dofaf = 1;
-		mutex_exit(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_RELEASE);
 	}
 
 #ifdef DIAGNOSTIC
@@ -2276,10 +2276,10 @@ puffs_vnop_strategy(void *v)
 				DPRINTF(("puffs_strategy: write-protecting "
 				    "vp %p page %p, offset %" PRId64"\n",
 				    vp, vmp, vmp->offset));
-				mutex_enter(&uobj->vmobjlock);
+				lockmgr(&uobj->vmobjlock, LK_EXCLUSIVE);
 				vmp->flags |= PG_RDONLY;
 				pmap_page_protect(vmp, VM_PROT_READ);
-				mutex_exit(&uobj->vmobjlock);
+				lockmgr(&uobj->vmobjlock, LK_RELEASE);
 			}
 		}
 
@@ -2471,13 +2471,13 @@ puffs_vnop_getpages(void *v)
 		if (locked)
 			ERROUT(EBUSY);
 
-		mutex_exit(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_RELEASE);
 		vattr_null(&va);
 		va.va_size = vp->v_size;
 		error = dosetattr(vp, &va, FSCRED, 0);
 		if (error)
 			ERROUT(error);
-		mutex_enter(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 	}
 
 	if (write && PUFFS_WCACHEINFO(pmp)) {
@@ -2518,7 +2518,7 @@ puffs_vnop_getpages(void *v)
 	 * when the page is actually write-faulted to.
 	 */
 	if (!locked)
-		mutex_enter(&vp->v_uobj.vmobjlock);
+		lockmgr(&vp->v_uobj.vmobjlock, LK_EXCLUSIVE);
 	for (i = 0, si = 0, streakon = 0; i < npages; i++) {
 		if (pgs[i] == NULL || pgs[i] == PGO_DONTCARE) {
 			if (streakon && write) {
@@ -2544,7 +2544,7 @@ puffs_vnop_getpages(void *v)
 		si++;
 	}
 	if (!locked)
-		mutex_exit(&vp->v_uobj.vmobjlock);
+		lockmgr(&vp->v_uobj.vmobjlock, LK_RELEASE);
 
 	KKASSERT(si <= (npages / 2) + 1);
 

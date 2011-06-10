@@ -149,9 +149,9 @@ puffs_parkdone_poll(struct puffs_mount *pmp, struct puffs_req *preq, void *arg)
 	else
 		revents = POLLERR;
 
-	mutex_enter(&pn->pn_mtx);
+	lockmgr(&pn->pn_mtx, LK_EXCLUSIVE);
 	pn->pn_revents |= revents;
-	mutex_exit(&pn->pn_mtx);
+	lockmgr(&pn->pn_mtx, LK_RELEASE);
 
 	selnotify(&pn->pn_sel, revents, 0);
 
@@ -162,7 +162,7 @@ void
 puffs_mp_reference(struct puffs_mount *pmp)
 {
 
-	KKASSERT(mutex_owned(&pmp->pmp_lock));
+	KKASSERT(lockstatus(&pmp->pmp_lock, curthread) == LK_EXCLUSIVE);
 	pmp->pmp_refcount++;
 }
 
@@ -170,7 +170,7 @@ void
 puffs_mp_release(struct puffs_mount *pmp)
 {
 
-	KKASSERT(mutex_owned(&pmp->pmp_lock));
+	KKASSERT(lockstatus(&pmp->pmp_lock, curthread) == LK_EXCLUSIVE);
 	if (--pmp->pmp_refcount == 0)
 		cv_broadcast(&pmp->pmp_refcount_cv);
 }

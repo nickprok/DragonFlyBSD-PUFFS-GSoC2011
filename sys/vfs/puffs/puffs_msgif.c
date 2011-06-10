@@ -66,8 +66,8 @@ struct puffs_msgpark {
 	int			park_flags;
 	int			park_refcount;
 
-	kcondvar_t		park_cv;
-	kmutex_t		park_mtx;
+	struct cv		park_cv;
+	struct lock		park_mtx;
 
 	TAILQ_ENTRY(puffs_msgpark) park_entries;
 };
@@ -89,7 +89,7 @@ makepark(void *obj, void *privdata, int flags)
 {
 	struct puffs_msgpark *park = obj;
 
-	mutex_init(&park->park_mtx, MUTEX_DEFAULT, IPL_NONE);
+	lockinit(&park->park_mtx, "puffs park_mtx", 0, 0);
 	cv_init(&park->park_cv, "puffsrpl");
 
 	return TRUE;
@@ -101,7 +101,7 @@ nukepark(void *obj, void *privdata)
 	struct puffs_msgpark *park = obj;
 
 	cv_destroy(&park->park_cv);
-	mutex_destroy(&park->park_mtx);
+	lockuninit(&park->park_mtx);
 }
 
 void
@@ -143,7 +143,7 @@ static void
 puffs_msgpark_reference(struct puffs_msgpark *park)
 {
 
-	KKASSERT(mutex_owned(&park->park_mtx));
+	KKASSERT(lockstatus(&park->park_mtx, curthread) == LK_EXCLUSIVE);
 	park->park_refcount++;
 }
 
@@ -157,9 +157,9 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 	struct puffs_req *creq = park->park_creq;
 	int refcnt;
 
-	KKASSERT(mutex_owned(&park->park_mtx));
+	KKASSERT(lockstatus(&park->park_mtx, curthread) == LK_EXCLUSIVE);
 	refcnt = park->park_refcount -= howmany;
-	mutex_exit(&park->park_mtx);
+	lockmgr(&park->park_mtx, LK_RELEASE);
 
 	KKASSERT(refcnt >= 0);
 
@@ -253,7 +253,7 @@ puffs_msgmem_release(struct puffs_msgpark *park)
 	if (park == NULL)
 		return;
 
-	mutex_enter(&park->park_mtx);
+	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	puffs_msgpark_release(park);
 }
 
@@ -302,9 +302,9 @@ puffs_getmsgid(struct puffs_mount *pmp)
 {
 	uint64_t rv;
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	rv = pmp->pmp_nextmsgid++;
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	return rv;
 }
@@ -397,9 +397,9 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 		}
 	}
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	if (pmp->pmp_status != PUFFSTAT_RUNNING) {
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		park->park_flags |= PARKFLAG_HASERROR;
 		preq->preq_rv = ENXIO;
 		return;
@@ -418,7 +418,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	park->park_flags |= PARKFLAG_ONQUEUE1;
 	pmp->pmp_msg_touser_count++;
 	park->park_refcount++;
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	cv_broadcast(&pmp->pmp_msg_waiter_cv);
 	putter_notify(pmp->pmp_pi);
@@ -451,26 +451,26 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	sigdelset(&ss, SIGKILL);
 	sigdelset(&ss, SIGHUP);
 	sigdelset(&ss, SIGQUIT);
-	mutex_enter(p->p_lock);
+	lockmgr(p->p_lock, LK_EXCLUSIVE);
 	sigprocmask1(l, SIG_BLOCK, &ss, &oss);
-	mutex_exit(p->p_lock);
+	lockmgr(p->p_lock, LK_RELEASE);
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	puffs_mp_reference(pmp);
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
-	mutex_enter(&park->park_mtx);
+	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	/* did the response beat us to the wait? */
 	if (__predict_false((park->park_flags & PARKFLAG_DONE)
 	    || (park->park_flags & PARKFLAG_HASERROR))) {
 		rv = park->park_preq->preq_rv;
-		mutex_exit(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_RELEASE);
 		goto skipwait;
 	}
 
 	if ((park->park_flags & PARKFLAG_WANTREPLY) == 0
 	    || (park->park_flags & PARKFLAG_CALL)) {
-		mutex_exit(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_RELEASE);
 		rv = 0;
 		goto skipwait;
 	}
@@ -482,7 +482,7 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 		park->park_flags |= PARKFLAG_WAITERGONE;
 		if (park->park_flags & PARKFLAG_DONE) {
 			rv = preq->preq_rv;
-			mutex_exit(&park->park_mtx);
+			lockmgr(&park->park_mtx, LK_RELEASE);
 		} else {
 			/*
 			 * ok, we marked it as going away, but
@@ -493,9 +493,9 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 			 * if it's on replywait queue to avoid error
 			 * to file server.  putop() code will DTRT.
 			 */
-			mutex_exit(&park->park_mtx);
-			mutex_enter(&pmp->pmp_lock);
-			mutex_enter(&park->park_mtx);
+			lockmgr(&park->park_mtx, LK_RELEASE);
+			lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
+			lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 
 			/*
 			 * Still on queue1?  We can safely remove it
@@ -512,25 +512,25 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 				pmp->pmp_msg_touser_count--;
 				park->park_flags &= ~PARKFLAG_ONQUEUE1;
 			} else {
-				mutex_exit(&park->park_mtx);
+				lockmgr(&park->park_mtx, LK_RELEASE);
 			}
-			mutex_exit(&pmp->pmp_lock);
+			lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 			rv = EINTR;
 		}
 	} else {
 		rv = preq->preq_rv;
-		mutex_exit(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_RELEASE);
 	}
 
  skipwait:
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	puffs_mp_release(pmp);
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
-	mutex_enter(p->p_lock);
+	lockmgr(p->p_lock, LK_EXCLUSIVE);
 	sigprocmask1(l, SIG_SETMASK, &oss, NULL);
-	mutex_exit(p->p_lock);
+	lockmgr(p->p_lock, LK_RELEASE);
 
 	return rv;
 }
@@ -600,7 +600,7 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 	int error;
 
 	error = 0;
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	puffs_mp_reference(pmp);
 	for (;;) {
 		/* RIP? */
@@ -631,7 +631,7 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		if (park == NULL)
 			continue;
 
-		mutex_enter(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 		puffs_msgpark_reference(park);
 
 		DPRINTF(("puffs_getout: found park at %p, ", park));
@@ -672,7 +672,7 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		TAILQ_REMOVE(&pmp->pmp_msg_touser, park, park_entries);
 		KKASSERT(park->park_flags & PARKFLAG_ONQUEUE1);
 		park->park_flags &= ~PARKFLAG_ONQUEUE1;
-		mutex_exit(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_RELEASE);
 
 		pmp->pmp_msg_touser_count--;
 		KKASSERT(pmp->pmp_msg_touser_count >= 0);
@@ -680,7 +680,7 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		break;
 	}
 	puffs_mp_release(pmp);
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	if (error == 0) {
 		*data = (uint8_t *)preq;
@@ -705,8 +705,8 @@ puffs_msgif_releaseout(void *this, void *parkptr, int status)
 
 	DPRINTF(("puffs_releaseout: returning park %p, errno %d: " ,
 	    park, status));
-	mutex_enter(&pmp->pmp_lock);
-	mutex_enter(&park->park_mtx);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
+	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	if (park->park_flags & PARKFLAG_WANTREPLY) {
 		if (status == 0) {
 			DPRINTF(("enqueue replywait\n"));
@@ -724,7 +724,7 @@ puffs_msgif_releaseout(void *this, void *parkptr, int status)
 		DPRINTF(("release\n"));
 		puffs_msgpark_release1(park, 2);
 	}
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 }
 
 size_t
@@ -733,9 +733,9 @@ puffs_msgif_waitcount(void *this)
 	struct puffs_mount *pmp = this;
 	size_t rv;
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	rv = pmp->pmp_msg_touser_count;
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	return rv;
 }
@@ -751,7 +751,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	struct puffs_msgpark *park;
 	int wgone;
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 
 	/* Locate waiter */
 	TAILQ_FOREACH(park, &pmp->pmp_msg_replywait, park_entries) {
@@ -761,11 +761,11 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	if (park == NULL) {
 		DPRINTF(("puffsop_msg: no request: %" PRIu64 "\n",
 		    preq->preq_id));
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		return; /* XXX send error */
 	}
 
-	mutex_enter(&park->park_mtx);
+	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	puffs_msgpark_reference(park);
 	if (pth->pth_framelen > park->park_maxlen) {
 		DPRINTF(("puffsop_msg: invalid buffer length: "
@@ -774,7 +774,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 		park->park_preq->preq_rv = EPROTO;
 		cv_signal(&park->park_cv);
 		puffs_msgpark_release1(park, 2);
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		return; /* XXX: error */
 	}
 	wgone = park->park_flags & PARKFLAG_WAITERGONE;
@@ -782,7 +782,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	KKASSERT(park->park_flags & PARKFLAG_ONQUEUE2);
 	TAILQ_REMOVE(&pmp->pmp_msg_replywait, park, park_entries);
 	park->park_flags &= ~PARKFLAG_ONQUEUE2;
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	if (wgone) {
 		DPRINTF(("puffsop_msg: bad service - waiter gone for "
@@ -897,7 +897,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 			break;
 		}
 
-		mutex_enter(&vp->v_uobj.vmobjlock);
+		lockmgr(&vp->v_uobj.vmobjlock, LK_EXCLUSIVE);
 		rv = VOP_PUTPAGES(vp, offlo, offhi, flags);
 		break;
 
@@ -946,16 +946,16 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 		memcpy(&psopr->psopr_pf, pf, sizeof(*pf));
 		psopr->psopr_sopreq = PUFFS_SOPREQ_FLUSH;
 
-		mutex_enter(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
-			mutex_exit(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 			kmem_free(psopr, sizeof(*psopr));
 			puffs_msg_sendresp(pmp, preq, ENXIO);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
 			    psopr, psopr_entries);
 			cv_signal(&pmp->pmp_sopcv);
-			mutex_exit(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 		}
 		break;
 	}
@@ -969,16 +969,16 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 		psopr->psopr_preq = *preq;
 		psopr->psopr_sopreq = PUFFS_SOPREQ_UNMOUNT;
 
-		mutex_enter(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
-			mutex_exit(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 			kmem_free(psopr, sizeof(*psopr));
 			puffs_msg_sendresp(pmp, preq, ENXIO);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
 			    psopr, psopr_entries);
 			cv_signal(&pmp->pmp_sopcv);
-			mutex_exit(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 		}
 		break;
 	}
@@ -1008,12 +1008,12 @@ puffs_sop_thread(void *arg)
 	boolean_t keeprunning;
 	boolean_t unmountme = FALSE;
 
-	mutex_enter(&pmp->pmp_sopmtx);
+	lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 	for (keeprunning = TRUE; keeprunning; ) {
 		while ((psopr = TAILQ_FIRST(&pmp->pmp_sopreqs)) == NULL)
 			cv_wait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx);
 		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
-		mutex_exit(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 
 		switch (psopr->psopr_sopreq) {
 		case PUFFS_SOPREQSYS_EXIT:
@@ -1037,7 +1037,7 @@ puffs_sop_thread(void *arg)
 		}
 
 		kmem_free(psopr, sizeof(*psopr));
-		mutex_enter(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 	}
 
 	/*
@@ -1045,15 +1045,15 @@ puffs_sop_thread(void *arg)
 	 */
 	while ((psopr = TAILQ_FIRST(&pmp->pmp_sopreqs)) != NULL) {
 		TAILQ_REMOVE(&pmp->pmp_sopreqs, psopr, psopr_entries);
-		mutex_exit(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 		puffs_msg_sendresp(pmp, &psopr->psopr_preq, ENXIO);
 		kmem_free(psopr, sizeof(*psopr));
-		mutex_enter(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 	}
 
 	pmp->pmp_sopthrcount--;
 	cv_broadcast(&pmp->pmp_sopcv);
-	mutex_exit(&pmp->pmp_sopmtx); /* not allowed to access fs after this */
+	lockmgr(&pmp->pmp_sopmtx, LK_RELEASE); /* not allowed to access fs after this */
 
 	/*
 	 * If unmount was requested, we can now safely do it here, since
@@ -1076,7 +1076,7 @@ puffs_msgif_close(void *this)
 	struct puffs_mount *pmp = this;
 	struct mount *mp = PMPTOMP(pmp);
 
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	puffs_mp_reference(pmp);
 
 	/*
@@ -1102,7 +1102,7 @@ puffs_msgif_close(void *this)
 	if (pmp->pmp_unmounting) {
 		cv_wait(&pmp->pmp_unmounting_cv, &pmp->pmp_lock);
 		puffs_mp_release(pmp);
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		DPRINTF(("puffs_fop_close: unmount was in progress for pmp %p, "
 		    "restart\n", pmp));
 		return ERESTART;
@@ -1111,7 +1111,7 @@ puffs_msgif_close(void *this)
 	/* Won't access pmp from here anymore */
 	atomic_inc_uint((unsigned int*)&mp->mnt_refcnt);
 	puffs_mp_release(pmp);
-	mutex_exit(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	/* Detach from VFS. */
 	(void)dounmount(mp, MNT_FORCE, curlwp);
@@ -1142,7 +1142,7 @@ puffs_userdead(struct puffs_mount *pmp)
 	for (park = TAILQ_FIRST(&pmp->pmp_msg_touser); park; park = park_next) {
 		uint8_t opclass;
 
-		mutex_enter(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 		puffs_msgpark_reference(park);
 		park_next = TAILQ_NEXT(park, park_entries);
 
@@ -1183,7 +1183,7 @@ puffs_userdead(struct puffs_mount *pmp)
 
 	/* signal waiters on RESPONSE FROM file server queue */
 	for (park=TAILQ_FIRST(&pmp->pmp_msg_replywait); park; park=park_next) {
-		mutex_enter(&park->park_mtx);
+		lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 		puffs_msgpark_reference(park);
 		park_next = TAILQ_NEXT(park, park_entries);
 

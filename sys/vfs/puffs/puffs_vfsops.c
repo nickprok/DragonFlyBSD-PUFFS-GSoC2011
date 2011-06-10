@@ -285,8 +285,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	pmp->pmp_root_rdev = args->pa_root_rdev;
 	pmp->pmp_docompat = args->pa_time32;
 
-	mutex_init(&pmp->pmp_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&pmp->pmp_sopmtx, MUTEX_DEFAULT, IPL_NONE);
+	lockinit(&pmp->pmp_lock, "puffs pmp_lock", 0, 0);
+	lockinit(&pmp->pmp_sopmtx, "puffs pmp_sopmtx", 0, 0);
 	cv_init(&pmp->pmp_msg_waiter_cv, "puffsget");
 	cv_init(&pmp->pmp_refcount_cv, "puffsref");
 	cv_init(&pmp->pmp_unmounting_cv, "puffsum");
@@ -356,10 +356,10 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 	 * If we are not DYING, we should ask userspace's opinion
 	 * about the situation
 	 */
-	mutex_enter(&pmp->pmp_lock);
+	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	if (pmp->pmp_status != PUFFSTAT_DYING) {
 		pmp->pmp_unmounting = 1;
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 		PUFFS_MSG_ALLOC(vfs, unmount);
 		puffs_msg_setinfo(park_unmount,
@@ -372,7 +372,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		error = checkerr(pmp, error, __func__);
 		DPRINTF(("puffs_unmount: error %d force %d\n", error, force));
 
-		mutex_enter(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 		pmp->pmp_unmounting = 0;
 		cv_broadcast(&pmp->pmp_unmounting_cv);
 	}
@@ -398,7 +398,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		 */
 		while (pmp->pmp_refcount != 0)
 			cv_wait(&pmp->pmp_refcount_cv, &pmp->pmp_lock);
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 		/*
 		 * Release kernel thread now that there is nothing
@@ -406,11 +406,11 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		 */
 		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
 		psopr->psopr_sopreq = PUFFS_SOPREQSYS_EXIT;
-		mutex_enter(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 		if (pmp->pmp_sopthrcount == 0) {
-			mutex_exit(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 			kmem_free(psopr, sizeof(*psopr));
-			mutex_enter(&pmp->pmp_sopmtx);
+			lockmgr(&pmp->pmp_sopmtx, LK_EXCLUSIVE);
 			KKASSERT(pmp->pmp_sopthrcount == 0);
 		} else {
 			TAILQ_INSERT_TAIL(&pmp->pmp_sopreqs,
@@ -419,21 +419,21 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 		}
 		while (pmp->pmp_sopthrcount > 0)
 			cv_wait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx);
-		mutex_exit(&pmp->pmp_sopmtx);
+		lockmgr(&pmp->pmp_sopmtx, LK_RELEASE);
 
 		/* free resources now that we hopefully have no waiters left */
 		cv_destroy(&pmp->pmp_unmounting_cv);
 		cv_destroy(&pmp->pmp_refcount_cv);
 		cv_destroy(&pmp->pmp_msg_waiter_cv);
 		cv_destroy(&pmp->pmp_sopcv);
-		mutex_destroy(&pmp->pmp_lock);
-		mutex_destroy(&pmp->pmp_sopmtx);
+		lockuninit(&pmp->pmp_lock);
+		lockuninit(&pmp->pmp_sopmtx);
 
 		kmem_free(pmp->pmp_pnodehash, BUCKETALLOC(pmp->pmp_npnodehash));
 		kmem_free(pmp, sizeof(struct puffs_mount));
 		error = 0;
 	} else {
-		mutex_exit(&pmp->pmp_lock);
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 	}
 
  out:
@@ -517,21 +517,21 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 	 * for the fs server, which should handle data and metadata for
 	 * all the nodes it knows to exist.
 	 */
-	mutex_enter(&mntvnode_lock);
+	lockmgr(&mntvnode_lock, LK_EXCLUSIVE);
  loop:
 	for (vp = TAILQ_FIRST(&mp->mnt_vnodelist); vp; vp = vunmark(mvp)) {
 		vmark(mvp, vp);
 		if (vp->v_mount != mp || vismarker(vp))
 			continue;
 
-		mutex_enter(&vp->v_interlock);
+		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 		pn = VPTOPP(vp);
 		if (vp->v_type != VREG || UVM_OBJ_IS_CLEAN(&vp->v_uobj)) {
-			mutex_exit(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_RELEASE);
 			continue;
 		}
 
-		mutex_exit(&mntvnode_lock);
+		lockmgr(&mntvnode_lock, LK_RELEASE);
 
 		/*
 		 * Here we try to get a reference to the vnode and to
@@ -550,7 +550,7 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 		 */
 		rv = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
 		if (rv) {
-			mutex_enter(&mntvnode_lock);
+			lockmgr(&mntvnode_lock, LK_EXCLUSIVE);
 			if (rv == ENOENT) {
 				(void)vunmark(mvp);
 				goto loop;
@@ -560,22 +560,22 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 
 		/* hmm.. is the FAF thing entirely sensible? */
 		if (waitfor == MNT_LAZY) {
-			mutex_enter(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 			pn->pn_stat |= PNODE_FAF;
-			mutex_exit(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_RELEASE);
 		}
 		rv = VOP_FSYNC(vp, cred, waitfor, 0, 0);
 		if (waitfor == MNT_LAZY) {
-			mutex_enter(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
 			pn->pn_stat &= ~PNODE_FAF;
-			mutex_exit(&vp->v_interlock);
+			lockmgr(&vp->v_interlock, LK_RELEASE);
 		}
 		if (rv)
 			error = rv;
 		vput(vp);
-		mutex_enter(&mntvnode_lock);
+		lockmgr(&mntvnode_lock, LK_EXCLUSIVE);
 	}
-	mutex_exit(&mntvnode_lock);
+	lockmgr(&mntvnode_lock, LK_RELEASE);
 	vnfree(mvp);
 
 	return error;
@@ -803,9 +803,9 @@ puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 
 	puffs_msg_enqueue(pmp, park_extattrctl);
 	if (vp) {
-		mutex_enter(&pnp->pn_mtx);
+		lockmgr(&pnp->pn_mtx, LK_EXCLUSIVE);
 		puffs_referencenode(pnp);
-		mutex_exit(&pnp->pn_mtx);
+		lockmgr(&pnp->pn_mtx, LK_RELEASE);
 		VOP_UNLOCK(vp);
 	}
 	error = puffs_msg_wait2(pmp, park_extattrctl, pnp, NULL);
