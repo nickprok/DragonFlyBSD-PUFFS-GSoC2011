@@ -37,17 +37,17 @@
 #include <sys/vnode.h>
 #include <sys/dirent.h>
 #include <sys/proc.h>
+#include <sys/kernel.h>
 #include <sys/module.h>
 #include <sys/kthread.h>
+#include <sys/libkern.h>
+
+#include <vfs/nfs/nfsproto.h>
 
 #include <dev/misc/putter/putter_sys.h>
 
 #include <vfs/puffs/puffs_msgif.h>
 #include <vfs/puffs/puffs_sys.h>
-
-MODULE(MODULE_CLASS_VFS, puffs, "putter");
-
-VFS_PROTOS(puffs_vfsop);
 
 #ifndef PUFFS_PNODEBUCKETS
 #define PUFFS_PNODEBUCKETS 256
@@ -60,6 +60,10 @@ int puffs_maxpnodebuckets = PUFFS_MAXPNODEBUCKETS;
 
 #define BUCKETALLOC(a) (sizeof(struct puffs_pnode_hashlist *) * (a))
 
+#ifndef __arraycount
+#define __arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
+#endif
+
 static struct putter_ops puffs_putter = {
 	.pop_getout	= puffs_msgif_getout,
 	.pop_releaseout	= puffs_msgif_releaseout,
@@ -67,16 +71,6 @@ static struct putter_ops puffs_putter = {
 	.pop_dispatch	= puffs_msgif_dispatch,
 	.pop_close	= puffs_msgif_close,
 };
-
-/*
- * Try to ensure data structures used by the puffs protocol
- * do not unexpectedly change.
- */
-#ifdef __i386__
-CTASSERT(sizeof(struct puffs_kargs) == 3928);
-CTASSERT(sizeof(struct vattr) == 136);
-CTASSERT(sizeof(struct puffs_req) == 44);
-#endif
 
 int
 puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
@@ -314,18 +308,7 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	return error;
 }
 
-int
-puffs_vfsop_start(struct mount *mp, int flags)
-{
-	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
-
-	KKASSERT(pmp->pmp_status == PUFFSTAT_MOUNTING);
-	pmp->pmp_status = PUFFSTAT_RUNNING;
-
-	return 0;
-}
-
-int
+static int
 puffs_vfsop_unmount(struct mount *mp, int mntflags)
 {
 	PUFFS_MSG_VARS(vfs, unmount);
@@ -443,7 +426,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 /*
  * This doesn't need to travel to userspace
  */
-int
+static int
 puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 {
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
@@ -451,6 +434,15 @@ puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 
 	rv = puffs_cookie2vnode(pmp, pmp->pmp_root_cookie, 1, 1, vpp);
 	KKASSERT(rv != PUFFS_NOSUCHCOOKIE);
+
+	if (rv == 0) {
+		/* puffs_vfsop_start */
+		lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
+		if (pmp->pmp_status == PUFFSTAT_MOUNTING)
+			pmp->pmp_status = PUFFSTAT_RUNNING;
+		lockmgr(&pmp->pmp_lock, LK_RELEASE);
+	}
+
 	return rv;
 }
 
@@ -739,28 +731,23 @@ puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
 	return error;
 }
 
-void
-puffs_vfsop_init(void)
+static int
+puffs_vfsop_init(struct vfsconf *vfc)
 {
 
 	/* some checks depend on this */
 	KKASSERT(VNOVAL == VSIZENOTSET);
 
 	puffs_msgif_init();
+	return 0;
 }
 
-void
-puffs_vfsop_done(void)
+static int
+puffs_vfsop_uninit(struct vfsconf *vfc)
 {
 
 	puffs_msgif_destroy();
-}
-
-int
-puffs_vfsop_snapshot(struct mount *mp, struct vnode *vp, struct timespec *ts)
-{
-
-	return EOPNOTSUPP;
+	return 0;
 }
 
 int
@@ -813,52 +800,19 @@ puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 	return checkerr(pmp, error, __func__);
 }
 
-const struct vnodeopv_desc * const puffs_vnodeopv_descs[] = {
-	&puffs_vnodeop_opv_desc,
-	&puffs_specop_opv_desc,
-	&puffs_fifoop_opv_desc,
-	&puffs_msgop_opv_desc,
-	NULL,
+static struct vfsops puffs_vfsops = {
+	.vfs_mount =		puffs_vfsop_mount,
+	.vfs_unmount =		puffs_vfsop_unmount,
+	.vfs_root =		puffs_vfsop_root,
+	.vfs_statvfs =		puffs_vfsop_statvfs,
+	.vfs_sync =		puffs_vfsop_sync,
+	.vfs_fhtovp =		puffs_vfsop_fhtovp,
+	.vfs_vptofh =		puffs_vfsop_vptofh,
+	.vfs_extattrctl =	puffs_vfsop_extattrctl,
+	.vfs_init =		puffs_vfsop_init,
+	.vfs_uninit =		puffs_vfsop_uninit,
 };
 
-struct vfsops puffs_vfsops = {
-	MOUNT_PUFFS,
-	sizeof (struct puffs_kargs),
-	puffs_vfsop_mount,		/* mount	*/
-	puffs_vfsop_start,		/* start	*/
-	puffs_vfsop_unmount,		/* unmount	*/
-	puffs_vfsop_root,		/* root		*/
-	(void *)eopnotsupp,		/* quotactl	*/
-	puffs_vfsop_statvfs,		/* statvfs	*/
-	puffs_vfsop_sync,		/* sync		*/
-	(void *)eopnotsupp,		/* vget		*/
-	puffs_vfsop_fhtovp,		/* fhtovp	*/
-	puffs_vfsop_vptofh,		/* vptofh	*/
-	puffs_vfsop_init,		/* init		*/
-	NULL,				/* reinit	*/
-	puffs_vfsop_done,		/* done		*/
-	NULL,				/* mountroot	*/
-	puffs_vfsop_snapshot,		/* snapshot	*/
-	puffs_vfsop_extattrctl,		/* extattrctl	*/
-	(void *)eopnotsupp,		/* suspendctl	*/
-	genfs_renamelock_enter,
-	genfs_renamelock_exit,
-	(void *)eopnotsupp,
-	puffs_vnodeopv_descs,		/* vnodeops	*/
-	0,				/* refcount	*/
-	{ NULL, NULL }
-};
+VFS_SET(puffs_vfsops, puffs, 0);
+MODULE_DEPEND(puffs, putter, 1, 1, 1);
 
-static int
-puffs_modcmd(modcmd_t cmd, void *arg)
-{
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		return vfs_attach(&puffs_vfsops);
-	case MODULE_CMD_FINI:
-		return vfs_detach(&puffs_vfsops);
-	default:
-		return ENOTTY;
-	}
-}
