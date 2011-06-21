@@ -38,257 +38,12 @@
 #include <sys/vnode.h>
 #include <sys/proc.h>
 
+#include <vfs/fifofs/fifo.h>
+
 #include <vfs/puffs/puffs_msgif.h>
 #include <vfs/puffs/puffs_sys.h>
 
-int	puffs_vnop_lookup(void *);
-int	puffs_vnop_create(void *);
-int	puffs_vnop_access(void *);
-int	puffs_vnop_mknod(void *);
-int	puffs_vnop_open(void *);
-int	puffs_vnop_close(void *);
-int	puffs_vnop_getattr(void *);
-int	puffs_vnop_setattr(void *);
-int	puffs_vnop_reclaim(void *);
-int	puffs_vnop_readdir(void *);
-int	puffs_vnop_poll(void *);
-int	puffs_vnop_fsync(void *);
-int	puffs_vnop_seek(void *);
-int	puffs_vnop_remove(void *);
-int	puffs_vnop_mkdir(void *);
-int	puffs_vnop_rmdir(void *);
-int	puffs_vnop_link(void *);
-int	puffs_vnop_readlink(void *);
-int	puffs_vnop_symlink(void *);
-int	puffs_vnop_rename(void *);
-int	puffs_vnop_read(void *);
-int	puffs_vnop_write(void *);
-int	puffs_vnop_fcntl(void *);
-int	puffs_vnop_ioctl(void *);
-int	puffs_vnop_inactive(void *);
-int	puffs_vnop_print(void *);
-int	puffs_vnop_pathconf(void *);
-int	puffs_vnop_advlock(void *);
-int	puffs_vnop_strategy(void *);
-int	puffs_vnop_bmap(void *);
-int	puffs_vnop_mmap(void *);
-int	puffs_vnop_getpages(void *);
-int	puffs_vnop_abortop(void *);
-int	puffs_vnop_getextattr(void *);
-int	puffs_vnop_setextattr(void *);
-int	puffs_vnop_listextattr(void *);
-int	puffs_vnop_deleteextattr(void *);
-
-int	puffs_vnop_spec_read(void *);
-int	puffs_vnop_spec_write(void *);
-int	puffs_vnop_fifo_read(void *);
-int	puffs_vnop_fifo_write(void *);
-
-int	puffs_vnop_checkop(void *);
-
-#define puffs_vnop_lock genfs_lock
-#define puffs_vnop_unlock genfs_unlock
-#define puffs_vnop_islocked genfs_islocked
-
 int (**puffs_vnodeop_p)(void *);
-const struct vnodeopv_entry_desc puffs_vnodeop_entries[] = {
-	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, puffs_vnop_lookup },	/* REAL lookup */
-	{ &vop_create_desc, puffs_vnop_checkop },	/* create */
-        { &vop_mknod_desc, puffs_vnop_checkop },	/* mknod */
-        { &vop_open_desc, puffs_vnop_open },		/* REAL open */
-        { &vop_close_desc, puffs_vnop_checkop },	/* close */
-        { &vop_access_desc, puffs_vnop_access },	/* REAL access */
-        { &vop_getattr_desc, puffs_vnop_checkop },	/* getattr */
-        { &vop_setattr_desc, puffs_vnop_checkop },	/* setattr */
-        { &vop_read_desc, puffs_vnop_checkop },		/* read */
-        { &vop_write_desc, puffs_vnop_checkop },	/* write */
-        { &vop_fsync_desc, puffs_vnop_fsync },		/* REAL fsync */
-        { &vop_seek_desc, puffs_vnop_checkop },		/* seek */
-        { &vop_remove_desc, puffs_vnop_checkop },	/* remove */
-        { &vop_link_desc, puffs_vnop_checkop },		/* link */
-        { &vop_rename_desc, puffs_vnop_checkop },	/* rename */
-        { &vop_mkdir_desc, puffs_vnop_checkop },	/* mkdir */
-        { &vop_rmdir_desc, puffs_vnop_checkop },	/* rmdir */
-        { &vop_symlink_desc, puffs_vnop_checkop },	/* symlink */
-        { &vop_readdir_desc, puffs_vnop_checkop },	/* readdir */
-        { &vop_readlink_desc, puffs_vnop_checkop },	/* readlink */
-        { &vop_getpages_desc, puffs_vnop_checkop },	/* getpages */
-        { &vop_putpages_desc, genfs_putpages },		/* REAL putpages */
-        { &vop_pathconf_desc, puffs_vnop_checkop },	/* pathconf */
-        { &vop_advlock_desc, puffs_vnop_advlock },	/* advlock */
-        { &vop_strategy_desc, puffs_vnop_strategy },	/* REAL strategy */
-        { &vop_revoke_desc, genfs_revoke },		/* REAL revoke */
-        { &vop_abortop_desc, puffs_vnop_abortop },	/* REAL abortop */
-        { &vop_inactive_desc, puffs_vnop_inactive },	/* REAL inactive */
-        { &vop_reclaim_desc, puffs_vnop_reclaim },	/* REAL reclaim */
-        { &vop_lock_desc, puffs_vnop_lock },		/* REAL lock */
-        { &vop_unlock_desc, puffs_vnop_unlock },	/* REAL unlock */
-        { &vop_bmap_desc, puffs_vnop_bmap },		/* REAL bmap */
-        { &vop_print_desc, puffs_vnop_print },		/* REAL print */
-        { &vop_islocked_desc, puffs_vnop_islocked },	/* REAL islocked */
-        { &vop_bwrite_desc, genfs_nullop },		/* REAL bwrite */
-        { &vop_mmap_desc, puffs_vnop_mmap },		/* REAL mmap */
-        { &vop_poll_desc, puffs_vnop_poll },		/* REAL poll */
-	{ &vop_getextattr_desc, puffs_vnop_getextattr },	/* getextattr */
-	{ &vop_setextattr_desc, puffs_vnop_setextattr },	/* setextattr */
-	{ &vop_listextattr_desc, puffs_vnop_listextattr },	/* listextattr */
-	{ &vop_deleteextattr_desc, puffs_vnop_deleteextattr },/* deleteextattr */
-#if 0
-	{ &vop_openextattr_desc, puffs_vnop_checkop },	/* openextattr */
-	{ &vop_closeextattr_desc, puffs_vnop_checkop },	/* closeextattr */
-#endif
-        { &vop_kqfilter_desc, genfs_eopnotsupp },	/* kqfilter XXX */
-	{ NULL, NULL }
-};
-const struct vnodeopv_desc puffs_vnodeop_opv_desc =
-	{ &puffs_vnodeop_p, puffs_vnodeop_entries };
-
-
-int (**puffs_specop_p)(void *);
-const struct vnodeopv_entry_desc puffs_specop_entries[] = {
-	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, spec_lookup },		/* lookup, ENOTDIR */
-	{ &vop_create_desc, spec_create },		/* genfs_badop */
-	{ &vop_mknod_desc, spec_mknod },		/* genfs_badop */
-	{ &vop_open_desc, spec_open },			/* spec_open */
-	{ &vop_close_desc, spec_close },		/* spec_close */
-	{ &vop_access_desc, puffs_vnop_checkop },	/* access */
-	{ &vop_getattr_desc, puffs_vnop_checkop },	/* getattr */
-	{ &vop_setattr_desc, puffs_vnop_checkop },	/* setattr */
-	{ &vop_read_desc, puffs_vnop_spec_read },	/* update, read */
-	{ &vop_write_desc, puffs_vnop_spec_write },	/* update, write */
-	{ &vop_ioctl_desc, spec_ioctl },		/* spec_ioctl */
-	{ &vop_fcntl_desc, genfs_fcntl },		/* dummy */
-	{ &vop_poll_desc, spec_poll },			/* spec_poll */
-	{ &vop_kqfilter_desc, spec_kqfilter },		/* spec_kqfilter */
-	{ &vop_revoke_desc, spec_revoke },		/* genfs_revoke */
-	{ &vop_mmap_desc, spec_mmap },			/* spec_mmap */
-	{ &vop_fsync_desc, spec_fsync },		/* vflushbuf */
-	{ &vop_seek_desc, spec_seek },			/* genfs_nullop */
-	{ &vop_remove_desc, spec_remove },		/* genfs_badop */
-	{ &vop_link_desc, spec_link },			/* genfs_badop */
-	{ &vop_rename_desc, spec_rename },		/* genfs_badop */
-	{ &vop_mkdir_desc, spec_mkdir },		/* genfs_badop */
-	{ &vop_rmdir_desc, spec_rmdir },		/* genfs_badop */
-	{ &vop_symlink_desc, spec_symlink },		/* genfs_badop */
-	{ &vop_readdir_desc, spec_readdir },		/* genfs_badop */
-	{ &vop_readlink_desc, spec_readlink },		/* genfs_badop */
-	{ &vop_abortop_desc, spec_abortop },		/* genfs_badop */
-	{ &vop_inactive_desc, puffs_vnop_inactive },	/* REAL inactive */
-	{ &vop_reclaim_desc, puffs_vnop_reclaim },	/* REAL reclaim */
-	{ &vop_lock_desc, puffs_vnop_lock },		/* REAL lock */
-	{ &vop_unlock_desc, puffs_vnop_unlock },	/* REAL unlock */
-	{ &vop_bmap_desc, spec_bmap },			/* dummy */
-	{ &vop_strategy_desc, spec_strategy },		/* dev strategy */
-	{ &vop_print_desc, puffs_vnop_print },		/* REAL print */
-	{ &vop_islocked_desc, puffs_vnop_islocked },	/* REAL islocked */
-	{ &vop_pathconf_desc, spec_pathconf },		/* pathconf */
-	{ &vop_advlock_desc, spec_advlock },		/* lf_advlock */
-	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
-	{ &vop_getpages_desc, spec_getpages },		/* genfs_getpages */
-	{ &vop_putpages_desc, spec_putpages },		/* genfs_putpages */
-	{ &vop_getextattr_desc, puffs_vnop_checkop },	/* getextattr */
-	{ &vop_setextattr_desc, puffs_vnop_checkop },	/* setextattr */
-	{ &vop_listextattr_desc, puffs_vnop_checkop },	/* listextattr */
-	{ &vop_deleteextattr_desc, puffs_vnop_checkop },/* deleteextattr */
-#if 0
-	{ &vop_openextattr_desc, _openextattr },	/* openextattr */
-	{ &vop_closeextattr_desc, _closeextattr },	/* closeextattr */
-#endif
-	{ NULL, NULL }
-};
-const struct vnodeopv_desc puffs_specop_opv_desc =
-	{ &puffs_specop_p, puffs_specop_entries };
-
-
-int (**puffs_fifoop_p)(void *);
-const struct vnodeopv_entry_desc puffs_fifoop_entries[] = {
-	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, vn_fifo_bypass },		/* lookup, ENOTDIR */
-	{ &vop_create_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_mknod_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_open_desc, vn_fifo_bypass },		/* open */
-	{ &vop_close_desc, vn_fifo_bypass },		/* close */
-	{ &vop_access_desc, puffs_vnop_checkop },	/* access */
-	{ &vop_getattr_desc, puffs_vnop_checkop },	/* getattr */
-	{ &vop_setattr_desc, puffs_vnop_checkop },	/* setattr */
-	{ &vop_read_desc, puffs_vnop_fifo_read },	/* read, update */
-	{ &vop_write_desc, puffs_vnop_fifo_write },	/* write, update */
-	{ &vop_ioctl_desc, vn_fifo_bypass },		/* ioctl */
-	{ &vop_fcntl_desc, genfs_fcntl },		/* dummy */
-	{ &vop_poll_desc, vn_fifo_bypass },		/* poll */
-	{ &vop_kqfilter_desc, vn_fifo_bypass },		/* kqfilter */
-	{ &vop_revoke_desc, vn_fifo_bypass },		/* genfs_revoke */
-	{ &vop_mmap_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_fsync_desc, vn_fifo_bypass },		/* genfs_nullop*/
-	{ &vop_seek_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_remove_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_link_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_rename_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_mkdir_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_rmdir_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_symlink_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_readdir_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_readlink_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_abortop_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_inactive_desc, puffs_vnop_inactive },	/* REAL inactive */
-	{ &vop_reclaim_desc, puffs_vnop_reclaim },	/* REAL reclaim */
-	{ &vop_lock_desc, puffs_vnop_lock },		/* REAL lock */
-	{ &vop_unlock_desc, puffs_vnop_unlock },	/* REAL unlock */
-	{ &vop_bmap_desc, vn_fifo_bypass },		/* dummy */
-	{ &vop_strategy_desc, vn_fifo_bypass },		/* genfs_badop */
-	{ &vop_print_desc, puffs_vnop_print },		/* REAL print */
-	{ &vop_islocked_desc, puffs_vnop_islocked },	/* REAL islocked */
-	{ &vop_pathconf_desc, vn_fifo_bypass },		/* pathconf */
-	{ &vop_advlock_desc, vn_fifo_bypass },		/* genfs_einval */
-	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
-	{ &vop_putpages_desc, vn_fifo_bypass }, 	/* genfs_null_putpages*/
-#if 0
-	{ &vop_openextattr_desc, _openextattr },	/* openextattr */
-	{ &vop_closeextattr_desc, _closeextattr },	/* closeextattr */
-#endif
-	{ &vop_getextattr_desc, puffs_vnop_checkop },		/* getextattr */
-	{ &vop_setextattr_desc, puffs_vnop_checkop },		/* setextattr */
-	{ &vop_listextattr_desc, puffs_vnop_checkop },	/* listextattr */
-	{ &vop_deleteextattr_desc, puffs_vnop_checkop },	/* deleteextattr */
-	{ NULL, NULL }
-};
-const struct vnodeopv_desc puffs_fifoop_opv_desc =
-	{ &puffs_fifoop_p, puffs_fifoop_entries };
-
-
-/* "real" vnode operations */
-int (**puffs_msgop_p)(void *);
-const struct vnodeopv_entry_desc puffs_msgop_entries[] = {
-	{ &vop_default_desc, vn_default_error },
-	{ &vop_create_desc, puffs_vnop_create },	/* create */
-        { &vop_mknod_desc, puffs_vnop_mknod },		/* mknod */
-        { &vop_open_desc, puffs_vnop_open },		/* open */
-        { &vop_close_desc, puffs_vnop_close },		/* close */
-        { &vop_access_desc, puffs_vnop_access },	/* access */
-        { &vop_getattr_desc, puffs_vnop_getattr },	/* getattr */
-        { &vop_setattr_desc, puffs_vnop_setattr },	/* setattr */
-        { &vop_read_desc, puffs_vnop_read },		/* read */
-        { &vop_write_desc, puffs_vnop_write },		/* write */
-        { &vop_seek_desc, puffs_vnop_seek },		/* seek */
-        { &vop_remove_desc, puffs_vnop_remove },	/* remove */
-        { &vop_link_desc, puffs_vnop_link },		/* link */
-        { &vop_rename_desc, puffs_vnop_rename },	/* rename */
-        { &vop_mkdir_desc, puffs_vnop_mkdir },		/* mkdir */
-        { &vop_rmdir_desc, puffs_vnop_rmdir },		/* rmdir */
-        { &vop_symlink_desc, puffs_vnop_symlink },	/* symlink */
-        { &vop_readdir_desc, puffs_vnop_readdir },	/* readdir */
-        { &vop_readlink_desc, puffs_vnop_readlink },	/* readlink */
-        { &vop_print_desc, puffs_vnop_print },		/* print */
-        { &vop_islocked_desc, puffs_vnop_islocked },	/* islocked */
-        { &vop_pathconf_desc, puffs_vnop_pathconf },	/* pathconf */
-        { &vop_getpages_desc, puffs_vnop_getpages },	/* getpages */
-	{ NULL, NULL }
-};
-const struct vnodeopv_desc puffs_msgop_opv_desc =
-	{ &puffs_msgop_p, puffs_msgop_entries };
-
 
 #define ERROUT(err)							\
 do {									\
@@ -446,52 +201,33 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
  * don't want to think of the consequences for the time being.
  */
 
-int
-puffs_vnop_lookup(void *v)
+static int
+puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 {
-        struct vop_lookup_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode **a_vpp;
-		struct componentname *a_cnp;
-        } */ *ap = v;
 	PUFFS_MSG_VARS(vn, lookup);
-	struct puffs_mount *pmp;
-	struct componentname *cnp;
-	struct vnode *vp, *dvp;
+	struct puffs_mount *pmp = MPTOPUFFSMP(ap->a_dvp->v_mount);
+	struct componentname *cnp = ap->a_cnp;
+	struct vnode *vp, *dvp = ap->a_dvp;
 	struct puffs_node *dpn;
-	int isdot;
+	int isdot= cnp->cn_namelen == 1 && *cnp->cn_nameptr == '.';
+	int isdotdot = cnp->cn_flags & CNP_ISDOTDOT;
+	int lockparent = cnp->cn_flags & CNP_LOCKPARENT;
 	int error;
 
-	pmp = MPTOPUFFSMP(ap->a_dvp->v_mount);
-	cnp = ap->a_cnp;
-	dvp = ap->a_dvp;
 	*ap->a_vpp = NULL;
 
 	/* r/o fs?  we check create later to handle EEXIST */
-	if ((cnp->cn_flags & ISLASTCN)
-	    && (dvp->v_mount->mnt_flag & MNT_RDONLY)
-	    && (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME))
+	if ((dvp->v_mount->mnt_flag & MNT_RDONLY)
+	    && (cnp->cn_nameiop == NAMEI_DELETE ||
+	    cnp->cn_nameiop == NAMEI_RENAME))
 		return EROFS;
 
-	isdot = cnp->cn_namelen == 1 && *cnp->cn_nameptr == '.';
-
 	DPRINTF(("puffs_lookup: \"%s\", parent vnode %p, op: %x\n",
-	    cnp->cn_nameptr, dvp, cnp->cn_nameiop));
-
-	/*
-	 * Check if someone fed it into the cache
-	 */
-	if (PUFFS_USE_NAMECACHE(pmp)) {
-		error = cache_lookup(dvp, ap->a_vpp, cnp);
-
-		if (error >= 0)
-			return error;
-	}
+	    cnp->cn_nameptr, dvp, (int)cnp->cn_nameiop));
 
 	if (isdot) {
 		/* deal with rename lookup semantics */
-		if (cnp->cn_nameiop == RENAME && (cnp->cn_flags & ISLASTCN))
+		if (cnp->cn_nameiop == NAMEI_RENAME)
 			return EISDIR;
 
 		vp = ap->a_dvp;
@@ -504,8 +240,8 @@ puffs_vnop_lookup(void *v)
 	puffs_makecn(&lookup_msg->pvnr_cn, &lookup_msg->pvnr_cn_cred,
 	    cnp, PUFFS_USE_FULLPNBUF(pmp));
 
-	if (cnp->cn_flags & ISDOTDOT)
-		VOP_UNLOCK(dvp);
+	if (isdotdot)
+		vn_unlock(dvp); /* XXXDF TODO */
 
 	puffs_msg_setinfo(park_lookup, PUFFSOP_VN,
 	    PUFFS_VN_LOOKUP, VPTOPNC(dvp));
@@ -524,20 +260,13 @@ puffs_vnop_lookup(void *v)
 		if (error == ENOENT) {
 			/* don't allow to create files on r/o fs */
 			if ((dvp->v_mount->mnt_flag & MNT_RDONLY)
-			    && cnp->cn_nameiop == CREATE) {
+			    && cnp->cn_nameiop == NAMEI_CREATE) {
 				error = EROFS;
 
 			/* adjust values if we are creating */
-			} else if ((cnp->cn_flags & ISLASTCN)
-			    && (cnp->cn_nameiop == CREATE
-			      || cnp->cn_nameiop == RENAME)) {
+			} else if ((cnp->cn_nameiop == NAMEI_CREATE
+			      || cnp->cn_nameiop == NAMEI_RENAME)) {
 				error = EJUSTRETURN;
-
-			/* save negative cache entry */
-			} else {
-				if ((cnp->cn_flags & MAKEENTRY)
-				    && PUFFS_USE_NAMECACHE(pmp))
-					cache_enter(dvp, NULL, cnp);
 			}
 		}
 		goto out;
@@ -574,18 +303,12 @@ puffs_vnop_lookup(void *v)
 
 	*ap->a_vpp = vp;
 
-	if ((cnp->cn_flags & MAKEENTRY) != 0 && PUFFS_USE_NAMECACHE(pmp))
-		cache_enter(dvp, vp, cnp);
-
-	/* XXX */
-	if ((lookup_msg->pvnr_cn.pkcn_flags & REQUIREDIR) == 0)
-		cnp->cn_flags &= ~REQUIREDIR;
 	if (lookup_msg->pvnr_cn.pkcn_consume)
 		cnp->cn_consume = MIN(lookup_msg->pvnr_cn.pkcn_consume,
 		    strlen(cnp->cn_nameptr) - cnp->cn_namelen);
 
  out:
-	if (cnp->cn_flags & ISDOTDOT)
+	if (isdotdot && lockparent)
 		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 
 	DPRINTF(("puffs_lookup: returning %d %p\n", error, *ap->a_vpp));
@@ -768,15 +491,9 @@ puffs_vnop_close(void *v)
 	return 0;
 }
 
-int
-puffs_vnop_access(void *v)
+static int
+puffs_vnop_access(struct vop_access_args *ap)
 {
-	struct vop_access_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, access);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -813,15 +530,9 @@ puffs_vnop_access(void *v)
 	return error;
 }
 
-int
-puffs_vnop_getattr(void *v)
+static int
+puffs_vnop_getattr(struct vop_getattr_args *ap)
 {
-	struct vop_getattr_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct vattr *a_vap;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, getattr);
 	struct vnode *vp = ap->a_vp;
 	struct mount *mp = vp->v_mount;
@@ -830,12 +541,15 @@ puffs_vnop_getattr(void *v)
 	struct puffs_node *pn = VPTOPP(vp);
 	int error = 0;
 
+	if (vp->v_type == VBLK || vp->v_type == VCHR)
+		return ENOTSUP;
+
 	REFPN(pn);
 	vap = ap->a_vap;
 
 	PUFFS_MSG_ALLOC(vn, getattr);
 	vattr_null(&getattr_msg->pvnr_va);
-	puffs_credcvt(&getattr_msg->pvnr_cred, ap->a_cred);
+	puffs_credcvt(&getattr_msg->pvnr_cred, curproc->p_ucred);
 	puffs_msg_setinfo(park_getattr, PUFFSOP_VN,
 	    PUFFS_VN_GETATTR, VPTOPNC(vp));
 
@@ -845,21 +559,9 @@ puffs_vnop_getattr(void *v)
 		goto out;
 
 	rvap = &getattr_msg->pvnr_va;
-	/*
-	 * Don't listen to the file server regarding special device
-	 * size info, the file server doesn't know anything about them.
-	 */
-	if (vp->v_type == VBLK || vp->v_type == VCHR)
-		rvap->va_size = vp->v_size;
-
-	/* Ditto for blocksize (ufs comment: this doesn't belong here) */
-	if (vp->v_type == VBLK)
-		rvap->va_blocksize = BLKDEV_IOSIZE;
-	else if (vp->v_type == VCHR)
-		rvap->va_blocksize = MAXBSIZE;
 
 	(void) memcpy(vap, rvap, sizeof(struct vattr));
-	vap->va_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
+	vap->va_fsid = mp->mnt_stat.f_fsid.val[0];
 
 	if (pn->pn_stat & PNODE_METACACHE_ATIME)
 		vap->va_atime = pn->pn_mc_atime;
@@ -872,7 +574,7 @@ puffs_vnop_getattr(void *v)
 	} else {
 		if (rvap->va_size != VNOVAL
 		    && vp->v_type != VBLK && vp->v_type != VCHR) {
-			uvm_vnp_setsize(vp, rvap->va_size);
+			vnode_pager_setsize(vp, rvap->va_size);
 			pn->pn_serversize = rvap->va_size;
 		}
 	}
@@ -1000,29 +702,31 @@ callinactive(struct puffs_mount *pmp, puffs_cookie_t ck, int iaflag)
 }
 
 /* XXX: callinactive can't setback */
-int
-puffs_vnop_inactive(void *v)
+static int
+puffs_vnop_inactive(struct vop_inactive_args *ap)
 {
-	struct vop_inactive_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, inactive);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pnode;
-	int error;
 
 	pnode = vp->v_data;
 
 	if (doinact(pmp, pnode->pn_stat & PNODE_DOINACT)) {
+		/*
+		 * do not wait for reply from userspace, otherwise it may
+		 * deadlock.
+		 */
+
+#ifdef XXXDF
 		flushvncache(vp, 0, 0, FALSE);
+#endif
 		PUFFS_MSG_ALLOC(vn, inactive);
+		puffs_msg_setfaf(park_inactive);
 		puffs_msg_setinfo(park_inactive, PUFFSOP_VN,
 		    PUFFS_VN_INACTIVE, VPTOPNC(vp));
 
-		PUFFS_MSG_ENQUEUEWAIT2(pmp, park_inactive, vp->v_data,
-		    NULL, error);
+		puffs_msg_enqueue(pmp, park_inactive);
 		PUFFS_MSG_RELEASE(inactive);
 	}
 	pnode->pn_stat &= ~PNODE_DOINACT;
@@ -1033,10 +737,8 @@ puffs_vnop_inactive(void *v)
 	 */
 	if (pnode->pn_stat & PNODE_NOREFS) {
 		pnode->pn_stat |= PNODE_DYING;
-		*ap->a_recycle = TRUE;
+		vrecycle(vp);
 	}
-
-	VOP_UNLOCK(vp);
 
 	return 0;
 }
@@ -1061,13 +763,9 @@ callreclaim(struct puffs_mount *pmp, puffs_cookie_t ck)
  * always FAF, we don't really care if the server wants to fail to
  * reclaim the node or not
  */
-int
-puffs_vnop_reclaim(void *v)
+static int
+puffs_vnop_reclaim(struct vop_reclaim_args *ap)
 {
-	struct vop_reclaim_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pnode = vp->v_data;
@@ -1079,7 +777,7 @@ puffs_vnop_reclaim(void *v)
 	 * Note that we don't need to take the lock similarly to
 	 * puffs_root(), since there is only one of us.
 	 */
-	if (vp->v_vflag & VV_ROOT) {
+	if (vp->v_flag & VROOT) {
 		lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 		KKASSERT(pmp->pmp_root != NULL);
 		pmp->pmp_root = NULL;
@@ -1107,18 +805,9 @@ puffs_vnop_reclaim(void *v)
 }
 
 #define CSIZE sizeof(**ap->a_cookies)
-int
-puffs_vnop_readdir(void *v)
+static int
+puffs_vnop_readdir(struct vop_readdir_args *ap)
 {
-	struct vop_readdir_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		kauth_cred_t a_cred;
-		int *a_eofflag;
-		off_t **a_cookies;
-		int *a_ncookies;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, readdir);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -1151,7 +840,7 @@ puffs_vnop_readdir(void *v)
 		if (pmp->pmp_args.pa_fhsize == 0)
 			return EOPNOTSUPP;
 		resid = PUFFS_TOMOVE(uio->uio_resid, pmp) / 2;
-		cookiesmax = resid/_DIRENT_MINSIZE((struct dirent *)0);
+		cookiesmax = resid/_DIRENT_RECLEN(1);
 		cookiemem = ALIGN(cookiesmax*CSIZE); /* play safe */
 	} else {
 		resid = PUFFS_TOMOVE(uio->uio_resid, pmp);
@@ -1210,7 +899,7 @@ puffs_vnop_readdir(void *v)
 
 	/* provide cookies to caller if so desired */
 	if (ap->a_cookies) {
-		*ap->a_cookies = malloc(readdir_msg->pvnr_ncookies*CSIZE,
+		*ap->a_cookies = kmalloc(readdir_msg->pvnr_ncookies*CSIZE,
 		    M_TEMP, M_WAITOK);
 		*ap->a_ncookies = readdir_msg->pvnr_ncookies;
 		memcpy(*ap->a_cookies, readdir_msg->pvnr_data,
@@ -2029,12 +1718,9 @@ puffs_vnop_write(void *v)
 	return error;
 }
 
-int
-puffs_vnop_print(void *v)
+static int
+puffs_vnop_print(struct vop_print_args *ap)
 {
-	struct vop_print_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, print);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -2042,11 +1728,11 @@ puffs_vnop_print(void *v)
 	int error;
 
 	/* kernel portion */
-	printf("tag VT_PUFFS, vnode %p, puffs node: %p,\n"
+	kprintf("tag VT_PUFFS, vnode %p, puffs node: %p,\n"
 	    "\tuserspace cookie: %p", vp, pn, pn->pn_cookie);
 	if (vp->v_type == VFIFO)
-		VOCALL(fifo_vnodeop_p, VOFFSET(vop_print), v);
-	printf("\n");
+		fifo_printinfo(vp);
+	kprintf("\n");
 
 	/* userspace portion */
 	if (EXISTSOP(pmp, PRINT)) {
@@ -2803,40 +2489,6 @@ puffs_vnop_deleteextattr(void *v)
 	return error;
 }
 
-/*
- * spec & fifo.  These call the miscfs spec and fifo vectors, but issue
- * FAF update information for the puffs node first.
- */
-int
-puffs_vnop_spec_read(void *v)
-{
-	struct vop_read_args /* { 
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-
-	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEATIME, 0);
-	return VOCALL(spec_vnodeop_p, VOFFSET(vop_read), v);
-}
-
-int
-puffs_vnop_spec_write(void *v)
-{
-	struct vop_write_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-
-	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEMTIME, 0);
-	return VOCALL(spec_vnodeop_p, VOFFSET(vop_write), v);
-}
-
 int
 puffs_vnop_fifo_read(void *v)
 {
@@ -2866,3 +2518,14 @@ puffs_vnop_fifo_write(void *v)
 	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEMTIME, 0);
 	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_write), v);
 }
+
+struct vop_ops puffs_vnode_vops = {
+	.vop_default =			vop_defaultop,
+	.vop_old_lookup =		puffs_vnop_lookup,
+	.vop_access =			puffs_vnop_access,
+	.vop_getattr =			puffs_vnop_getattr,
+	.vop_readdir =			puffs_vnop_readdir,
+	.vop_inactive =			puffs_vnop_inactive,
+	.vop_reclaim =			puffs_vnop_reclaim,
+	.vop_print =			puffs_vnop_print,
+};
