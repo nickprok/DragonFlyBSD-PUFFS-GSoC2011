@@ -634,7 +634,6 @@ puffs_vfsop_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 		    fhtonode_msg->pvfsr_rdev, &vp);
 		if (error)
 			goto out;
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	} else if (error) {
 		goto out;
 	}

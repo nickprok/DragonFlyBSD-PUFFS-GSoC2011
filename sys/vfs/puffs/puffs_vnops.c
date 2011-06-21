@@ -294,7 +294,6 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 			    lookup_msg->pvnr_newnode, ap->a_cnp);
 			goto out;
 		}
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	} else if (error) {
 		puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
 		    lookup_msg->pvnr_newnode, ap->a_cnp);

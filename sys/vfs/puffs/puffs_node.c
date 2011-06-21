@@ -206,9 +206,6 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 	error = puffs_getvnode(dvp->v_mount, ck, type, 0, rdev, &vp);
 	if (error)
 		return error;
-
-	vp->v_type = type;
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
 
 	return 0;
@@ -339,8 +336,8 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 	if (ck == pmp->pmp_root_cookie) {
 		if ((rv = puffs_makeroot(pmp)))
 			return rv;
-		if (lock)
-			vn_lock(pmp->pmp_root, LK_EXCLUSIVE | LK_RETRY);
+		if (!lock)
+			vn_unlock(pmp->pmp_root);
 
 		*vpp = pmp->pmp_root;
 		return 0;
