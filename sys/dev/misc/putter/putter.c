@@ -47,6 +47,7 @@
 #include <sys/spinlock.h>
 #include <sys/spinlock2.h>
 #include <sys/uio.h>
+#include <sys/vnode.h>
 
 #include <dev/misc/putter/putter_sys.h>
 
@@ -191,7 +192,7 @@ putter_fop_read(struct dev_read_args *ap)
 
 	if (pi->pi_curput == NULL) {
 		error = pi->pi_pop->pop_getout(pi->pi_private, uio->uio_resid,
-		    ap->a_ioflag & O_NONBLOCK, &pi->pi_curput,
+		    ap->a_ioflag & IO_NDELAY, &pi->pi_curput,
 		    &pi->pi_curres, &pi->pi_curopaq);
 		if (error) {
 			return error;
@@ -375,7 +376,8 @@ static int
 filt_putter_wr(struct knote *kn, long hint)
 {
 	/* Writing is always OK */
-	return (1);
+	kn->kn_data = 0;
+	return 1;
 }
 
 static struct filterops putter_filtops_rd =
@@ -528,3 +530,4 @@ static moduledata_t putter_mod = {
         NULL
 };
 DECLARE_MODULE(putter, putter_mod, SI_SUB_DRIVERS, SI_ORDER_MIDDLE);
+MODULE_VERSION(putter, 1);
