@@ -39,15 +39,6 @@
 #include <vfs/puffs/puffs_msgif.h>
 #include <vfs/puffs/puffs_sys.h>
 
-static const struct genfs_ops puffs_genfsops = {
-	.gop_size = puffs_gop_size,
-	.gop_write = genfs_gop_write,
-	.gop_markupdate = puffs_gop_markupdate,
-#if 0
-	.gop_alloc, should ask userspace
-#endif
-};
-
 static __inline struct puffs_node_hashlist
 	*puffs_cookie2hashlist(struct puffs_mount *, puffs_cookie_t);
 static struct puffs_node *puffs_cookie2pnode(struct puffs_mount *,
@@ -75,13 +66,19 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		    "bad node type", ck);
 		goto bad;
 	}
-	if (vsize == VSIZENOTSET) {
+	if (type == VBLK || type == VCHR) {
 		puffs_senderr(pmp, PUFFS_ERR_MAKENODE, EINVAL,
-		    "VSIZENOTSET is not a valid size", ck);
+		    "device nodes are not supported", ck);
+		goto bad;
+	}
+	if (vsize == VNOVAL) {
+		puffs_senderr(pmp, PUFFS_ERR_MAKENODE, EINVAL,
+		    "VNOVAL is not a valid size", ck);
 		goto bad;
 	}
 
-	error = getnewvnode(VT_PUFFS, mp, puffs_vnodeop_p, &vp);
+	/* XXX Add VT_PUFFS */
+	error = getnewvnode(VT_SYNTH, mp, &vp, 0, 0);
 	if (error)
 		goto bad;
 	vp->v_type = type;
@@ -91,28 +88,14 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 	 * care must be taken so that VOP_INACTIVE() isn't called.
 	 */
 
-	/* default size */
-	uvm_vnp_setsize(vp, 0);
-
 	/* dances based on vnode type. almost ufs_vinit(), but not quite */
 	switch (type) {
-	case VCHR:
-	case VBLK:
-		/*
-		 * replace vnode operation vector with the specops vector.
-		 * our user server has very little control over the node
-		 * if it decides its a character or block special file
-		 */
-		vp->v_op = puffs_specop_p;
-		spec_node_init(vp, rdev);
-		break;
-
 	case VFIFO:
-		vp->v_op = puffs_fifoop_p;
+		vp->v_ops = &mp->mnt_vn_fifo_ops;
 		break;
 
 	case VREG:
-		uvm_vnp_setsize(vp, vsize);
+		vinitvmio(vp, vsize, PAGE_SIZE, -1);
 		break;
 
 	case VDIR:
@@ -151,7 +134,6 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 	pnode->pn_vp = vp;
 	pnode->pn_serversize = vsize;
 
-	genfs_node_init(vp, &puffs_genfsops);
 	*vpp = vp;
 
 	DPRINTF(("new vnode at %p, pnode %p, cookie %p\n", vp,
@@ -229,9 +211,6 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
 
-	if ((cnp->cn_flags & MAKEENTRY) && PUFFS_USE_NAMECACHE(pmp))
-		cache_enter(dvp, vp, cnp);
-
 	return 0;
 }
 
@@ -249,7 +228,6 @@ puffs_putvnode(struct vnode *vp)
 		panic("puffs_putvnode: %p not a puffs vnode", vp);
 #endif
 
-	genfs_node_destroy(vp);
 	puffs_releasenode(pnode);
 	vp->v_data = NULL;
 
@@ -261,7 +239,7 @@ puffs_cookie2hashlist(struct puffs_mount *pmp, puffs_cookie_t ck)
 {
 	uint32_t hash;
 
-	hash = hash32_buf(&ck, sizeof(void *), HASH32_BUF_INIT);
+	hash = fnv_32_buf(&ck, sizeof(void *), FNV1_32_INIT);
 	return &pmp->pmp_pnodehash[hash % pmp->pmp_npnodehash];
 }
 
@@ -300,15 +278,11 @@ puffs_makeroot(struct puffs_mount *pmp)
 	 * pmp_root is set here and cleared in puffs_reclaim().
 	 */
  retry:
-	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	vp = pmp->pmp_root;
 	if (vp) {
-		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-		lockmgr(&pmp->pmp_lock, LK_RELEASE);
-		if (vget(vp, 0) == 0)
+		if (vget(vp, LK_EXCLUSIVE) == 0)
 			return 0;
-	} else
-		lockmgr(&pmp->pmp_lock, LK_RELEASE);
+	}
 
 	/*
 	 * So, didn't have the magic root vnode available.
@@ -333,7 +307,7 @@ puffs_makeroot(struct puffs_mount *pmp)
 	} 
 
 	/* store cache */
-	vp->v_vflag |= VV_ROOT;
+	vsetflags(vp, VROOT);
 	pmp->pmp_root = vp;
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
@@ -384,13 +358,15 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 		return PUFFS_NOSUCHCOOKIE;
 	}
 	vp = pnode->pn_vp;
-	lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
+	vhold(vp);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	vgetflags = 0;
 	if (lock)
 		vgetflags |= LK_EXCLUSIVE;
-	if ((rv = vget(vp, vgetflags)))
+	rv = vget(vp, vgetflags);
+	vdrop(vp);
+	if (rv)
 		return rv;
 
 	*vpp = vp;
