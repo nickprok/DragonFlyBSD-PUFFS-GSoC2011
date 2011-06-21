@@ -250,7 +250,7 @@ puffs_vfsop_mount(struct mount *mp, char *path, char *data,
 	 * device open, punt
 	 */
 	if ((pmp->pmp_pi
-	    = putter_attach(mntpid, args->pa_fd, pmp, &puffs_putter)) == NULL) {
+	    = putter_attach(mntpid, args->pa_minor, pmp, &puffs_putter)) == NULL) {
 		error = ENOENT;
 		goto out;
 	}

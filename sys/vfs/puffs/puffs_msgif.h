@@ -128,7 +128,7 @@ typedef puffs_cookie_t puffs_croissant_t;
 
 struct puffs_kargs {
 	unsigned int	pa_vers;
-	int		pa_fd;
+	int		pa_minor;
 
 	uint32_t	pa_flags;
 

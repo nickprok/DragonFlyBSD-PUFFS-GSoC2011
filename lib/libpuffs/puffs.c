@@ -513,6 +513,7 @@ int
 puffs_mount(struct puffs_usermount *pu, const char *dir, int mntflags,
 	puffs_cookie_t cookie)
 {
+	struct stat sb;
 	int rv, fd, sverrno;
 	char *comfd;
 
@@ -596,7 +597,14 @@ do {									\
 			warnx("puffs_mount: device fd %d (<= 2), sure this is "
 			    "what you want?", fd);
 
-		pu->pu_kargp->pa_fd = pu->pu_fd = fd;
+		pu->pu_fd = fd;
+		rv = fstat(fd, &sb);
+		if (rv == -1) {
+			warnx("puffs_mount: putter device stat failed");
+			goto out;
+		}
+		pu->pu_kargp->pa_minor = minor(sb.st_rdev);
+
 		if ((rv = mount(MOUNT_PUFFS, rp, mntflags,
 		    pu->pu_kargp)) == -1)
 			goto out;
