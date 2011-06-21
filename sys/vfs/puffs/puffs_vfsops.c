@@ -560,10 +560,12 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 
 	return error;
 }
+#endif
 
-int
-puffs_vfsop_sync(struct mount *mp, int waitfor, struct kauth_cred *cred)
+static int
+puffs_vfsop_sync(struct mount *mp, int waitfor)
 {
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, sync);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error, rv;
@@ -582,12 +584,17 @@ puffs_vfsop_sync(struct mount *mp, int waitfor, struct kauth_cred *cred)
 		error = rv;
 
 	PUFFS_MSG_RELEASE(sync);
+#else
+	int error = ENOTSUP;
+#endif
 	return error;
 }
 
-int
-puffs_vfsop_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
+static int
+puffs_vfsop_fhtovp(struct mount *mp, struct vnode *rootvp, struct fid *fhp,
+    struct vnode **vpp)
 {
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, fhtonode);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	struct vnode *vp;
@@ -641,12 +648,16 @@ puffs_vfsop_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 	*vpp = vp;
  out:
 	puffs_msgmem_release(park_fhtonode);
+#else
+	int error = ENOTSUP;
+#endif
 	return error;
 }
 
-int
-puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
+static int
+puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp)
 {
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, nodetofh);
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	size_t argsize, fhlen;
@@ -716,6 +727,9 @@ puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
 
  out:
 	puffs_msgmem_release(park_nodetofh);
+#else
+	int error = ENOTSUP;
+#endif
 	return error;
 }
 
@@ -738,10 +752,11 @@ puffs_vfsop_uninit(struct vfsconf *vfc)
 	return 0;
 }
 
-int
+static int
 puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
-	int attrnamespace, const char *attrname)
+	int attrnamespace, const char *attrname, struct ucred *cred)
 {
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, extattrctl);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	struct puffs_node *pnp;
@@ -786,6 +801,8 @@ puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 	}
 
 	return checkerr(pmp, error, __func__);
+#endif
+	return ENOTSUP;
 }
 
 static struct vfsops puffs_vfsops = {

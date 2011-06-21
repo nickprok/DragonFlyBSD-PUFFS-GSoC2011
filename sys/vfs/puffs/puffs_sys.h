@@ -186,7 +186,9 @@ struct puffs_node {
 	struct vnode	*pn_vp;		/* backpointer to vnode		*/
 	uint32_t	pn_stat;	/* node status			*/
 
+#ifdef XXXDF
 	struct selinfo	pn_sel;		/* for selecting on the node	*/
+#endif
 	short		pn_revents;	/* available events		*/
 
 	/* metacache */

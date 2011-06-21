@@ -113,7 +113,10 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 
 	/* insert cookie on list, take off of interlock list */
 	lockinit(&pnode->pn_mtx, "puffs pn_mtx", 0, 0);
+#ifdef XXXDF
 	selinit(&pnode->pn_sel);
+	knlist_init();
+#endif
 	plist = puffs_cookie2hashlist(pmp, ck);
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	LIST_INSERT_HEAD(plist, pnode, pn_hashent);
@@ -426,7 +429,9 @@ puffs_releasenode(struct puffs_node *pn)
 	if (--pn->pn_refcount == 0) {
 		lockmgr(&pn->pn_mtx, LK_RELEASE);
 		lockuninit(&pn->pn_mtx);
+#ifdef XXXDF
 		seldestroy(&pn->pn_sel);
+#endif
 		kfree(pn, M_PUFFS);
 	} else {
 		lockmgr(&pn->pn_mtx, LK_RELEASE);

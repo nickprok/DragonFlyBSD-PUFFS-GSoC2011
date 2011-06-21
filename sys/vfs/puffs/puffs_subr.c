@@ -155,7 +155,9 @@ puffs_parkdone_poll(struct puffs_mount *pmp, struct puffs_req *preq, void *arg)
 	pn->pn_revents |= revents;
 	lockmgr(&pn->pn_mtx, LK_RELEASE);
 
+#ifdef XXXDF
 	selnotify(&pn->pn_sel, revents, 0);
+#endif
 
 	puffs_releasenode(pn);
 }
@@ -177,6 +179,7 @@ puffs_mp_release(struct puffs_mount *pmp)
 		cv_broadcast(&pmp->pmp_refcount_cv);
 }
 
+#ifdef XXXDF
 void
 puffs_gop_size(struct vnode *vp, off_t size, off_t *eobp,
 	int flags)
@@ -197,6 +200,7 @@ puffs_gop_markupdate(struct vnode *vp, int flags)
 
 	puffs_updatenode(VPTOPP(vp), uflags, 0);
 }
+#endif
 
 void
 puffs_senderr(struct puffs_mount *pmp, int type, int error,

@@ -78,6 +78,7 @@ case VOP_##op##_DESCOFFSET:						\
 		return 0;						\
 	break
 
+#ifdef XXXDF
 int
 puffs_vnop_checkop(void *v)
 {
@@ -148,11 +149,14 @@ puffs_vnop_checkop(void *v)
 
 	return rv;
 }
+#endif
 
+#ifdef XXXDF
 static int callremove(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			    struct componentname *);
 static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
+#endif
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
 static int  flushvncache(struct vnode *, off_t, off_t, boolean_t);
@@ -172,6 +176,7 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
 	puffs_cookie_t dck, puffs_cookie_t ck, struct componentname *cnp)
 {
 
+#ifdef XXXDF
 	switch (what) {
 	case PUFFS_ABORT_CREATE:
 	case PUFFS_ABORT_MKNOD:
@@ -182,6 +187,7 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
 		callrmdir(pmp, dck, ck, cnp);
 		break;
 	}
+#endif
 
 	callinactive(pmp, ck, 0);
 	callreclaim(pmp, ck);
@@ -336,16 +342,9 @@ do {									\
 	vrele(a);							\
 } while (/*CONSTCOND*/0)
 
-int
-puffs_vnop_create(void *v)
+static int
+puffs_vnop_create(struct vop_old_create_args *ap)
 {
-	struct vop_create_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode **a_vpp;
-		struct componentname *a_cnp;
-		struct vattr *a_vap;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, create);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
@@ -383,16 +382,10 @@ puffs_vnop_create(void *v)
 	return error;
 }
 
-int
-puffs_vnop_mknod(void *v)
+static int
+puffs_vnop_mknod(struct vop_old_mknod_args *ap)
 {
-	struct vop_mknod_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode **a_vpp;
-		struct componentname *a_cnp;
-		struct vattr *a_vap;
-	} */ *ap = v;
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vn, mknod);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
@@ -424,18 +417,15 @@ puffs_vnop_mknod(void *v)
  out:
 	vput(dvp);
 	PUFFS_MSG_RELEASE(mknod);
+#else
+	int error = ENOTSUP;
+#endif
 	return error;
 }
 
-int
-puffs_vnop_open(void *v)
+static int
+puffs_vnop_open(struct vop_open_args *ap)
 {
-	struct vop_open_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, open);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -465,15 +455,10 @@ puffs_vnop_open(void *v)
 	return error;
 }
 
-int
-puffs_vnop_close(void *v)
+static int
+puffs_vnop_close(struct vop_close_args *ap)
 {
-	struct vop_close_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_fflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
+#ifdef XXXDF
 	PUFFS_MSG_VARS(vn, close);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -487,6 +472,7 @@ puffs_vnop_close(void *v)
 
 	puffs_msg_enqueue(pmp, park_close);
 	PUFFS_MSG_RELEASE(close);
+#endif
 	return 0;
 }
 
@@ -587,7 +573,7 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 #define SETATTR_CHSIZE	0x01
 #define SETATTR_ASYNC	0x02
 static int
-dosetattr(struct vnode *vp, struct vattr *vap, kauth_cred_t cred, int flags)
+dosetattr(struct vnode *vp, struct vattr *vap, struct ucred *cred, int flags)
 {
 	PUFFS_MSG_VARS(vn, setattr);
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -646,27 +632,24 @@ dosetattr(struct vnode *vp, struct vattr *vap, kauth_cred_t cred, int flags)
 		error = 0;
 	}
 
+#ifdef XXXDF
 	if (vap->va_size != VNOVAL) {
 		pn->pn_serversize = vap->va_size;
 		if (flags & SETATTR_CHSIZE)
 			uvm_vnp_setsize(vp, vap->va_size);
 	}
+#endif
 
 	return 0;
 }
 
-int
-puffs_vnop_setattr(void *v)
+#ifdef XXXDF
+static int
+puffs_vnop_setattr(struct vop_getattr_args *ap)
 {
-	struct vop_getattr_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct vattr *a_vap;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-
 	return dosetattr(ap->a_vp, ap->a_vap, ap->a_cred, SETATTR_CHSIZE);
 }
+#endif
 
 static __inline int
 doinact(struct puffs_mount *pmp, int iaflag)
@@ -914,6 +897,7 @@ puffs_vnop_readdir(struct vop_readdir_args *ap)
 }
 #undef CSIZE
 
+#ifdef XXXDF
 /*
  * poll works by consuming the bitmask in pn_revents.  If there are
  * events available, poll returns immediately.  If not, it issues a
@@ -924,7 +908,7 @@ puffs_vnop_readdir(struct vop_readdir_args *ap)
  * and hopefully find the missing bits (unless someone got them first,
  * in which case it starts all over again).
  */
-int
+static int
 puffs_vnop_poll(void *v)
 {
 	struct vop_poll_args /* {
@@ -995,7 +979,7 @@ flushvncache(struct vnode *vp, off_t offlo, off_t offhi, boolean_t wait)
 	return VOP_PUTPAGES(vp, trunc_page(offlo), round_page(offhi), pflags);
 }
 
-int
+static int
 puffs_vnop_fsync(void *v)
 {
 	struct vop_fsync_args /* {
@@ -1110,7 +1094,7 @@ callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
  * XXX: can't use callremove now because can't catch setbacks with
  * it due to lack of a pnode argument.
  */
-int
+static int
 puffs_vnop_remove(void *v)
 {
 	struct vop_remove_args /* {
@@ -1153,7 +1137,7 @@ puffs_vnop_remove(void *v)
 	return error;
 }
 
-int
+static int
 puffs_vnop_mkdir(void *v)
 {
 	struct vop_mkdir_args /* {
@@ -1215,7 +1199,7 @@ callrmdir(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
 	return checkerr(pmp, error, __func__);
 }
 
-int
+static int
 puffs_vnop_rmdir(void *v)
 {
 	struct vop_rmdir_args /* {
@@ -1254,7 +1238,7 @@ puffs_vnop_rmdir(void *v)
 	return error;
 }
 
-int
+static int
 puffs_vnop_link(void *v)
 {
 	struct vop_link_args /* {
@@ -1301,7 +1285,7 @@ puffs_vnop_link(void *v)
 	return error;
 }
 
-int
+static int
 puffs_vnop_symlink(void *v)
 {
 	struct vop_symlink_args /* {
@@ -1350,7 +1334,7 @@ puffs_vnop_symlink(void *v)
 	return error;
 }
 
-int
+static int
 puffs_vnop_readlink(void *v)
 {
 	struct vop_readlink_args /* {
@@ -1392,7 +1376,7 @@ puffs_vnop_readlink(void *v)
 	return error;
 }
 
-int
+static int
 puffs_vnop_rename(void *v)
 {
 	struct vop_rename_args /* {
@@ -1460,6 +1444,7 @@ puffs_vnop_rename(void *v)
 
 	return error;
 }
+#endif
 
 #define RWARGS(cont, iofl, move, offset, creds)				\
 	(cont)->pvnr_ioflag = (iofl);					\
@@ -1467,22 +1452,17 @@ puffs_vnop_rename(void *v)
 	(cont)->pvnr_offset = (offset);					\
 	puffs_credcvt(&(cont)->pvnr_cred, creds)
 
-int
-puffs_vnop_read(void *v)
+static int
+puffs_vnop_read(struct vop_read_args *ap)
 {
-	struct vop_read_args /* { 
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, read);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct uio *uio = ap->a_uio;
 	size_t tomove, argsize;
+#ifdef XXXDF
 	vsize_t bytelen;
+#endif
 	int error;
 
 	read_msg = NULL;
@@ -1494,6 +1474,7 @@ puffs_vnop_read(void *v)
 	if (uio->uio_offset < 0)
 		return EINVAL;
 
+#if XXXDF
 	if (vp->v_type == VREG && PUFFS_USE_PAGECACHE(pmp)) {
 		const int advice = IO_ADV_DECODE(ap->a_ioflag);
 
@@ -1511,6 +1492,9 @@ puffs_vnop_read(void *v)
 
 		if ((vp->v_mount->mnt_flag & MNT_NOATIME) == 0)
 			puffs_updatenode(VPTOPP(vp), PUFFS_UPDATEATIME, 0);
+#else
+	if (0) {
+#endif
 	} else {
 		/*
 		 * in case it's not a regular file or we're operating
@@ -1564,13 +1548,14 @@ puffs_vnop_read(void *v)
 	return error;
 }
 
+#ifdef XXXDF
 /*
  * XXX: in case of a failure, this leaves uio in a bad state.
  * We could theoretically copy the uio and iovecs and "replay"
  * them the right amount after the userspace trip, but don't
  * bother for now.
  */
-int
+static int
 puffs_vnop_write(void *v)
 {
 	struct vop_write_args /* {
@@ -1716,6 +1701,7 @@ puffs_vnop_write(void *v)
 
 	return error;
 }
+#endif
 
 static int
 puffs_vnop_print(struct vop_print_args *ap)
@@ -1746,7 +1732,7 @@ puffs_vnop_print(struct vop_print_args *ap)
 	return 0;
 }
 
-int
+static int
 puffs_vnop_pathconf(void *v)
 {
 	struct vop_pathconf_args /* {
@@ -1773,6 +1759,7 @@ puffs_vnop_pathconf(void *v)
 	return error;
 }
 
+#ifdef XXXDF
 int
 puffs_vnop_advlock(void *v)
 {
@@ -1840,7 +1827,7 @@ puffs_vnop_abortop(void *v)
 /*
  * This maps itself to PUFFS_VN_READ/WRITE for data transfer.
  */
-int
+static int
 puffs_vnop_strategy(void *v)
 {
 	struct vop_strategy_args /* {
@@ -2517,6 +2504,7 @@ puffs_vnop_fifo_write(void *v)
 	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEMTIME, 0);
 	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_write), v);
 }
+#endif
 
 struct vop_ops puffs_vnode_vops = {
 	.vop_default =			vop_defaultop,
