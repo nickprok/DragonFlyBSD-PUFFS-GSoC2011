@@ -37,10 +37,11 @@
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
+#include <sys/signal2.h>
 #include <sys/vnode.h>
+#include <machine/inttypes.h>
 
 #include <dev/misc/putter/putter_sys.h>
-
 #include <vfs/puffs/puffs_msgif.h>
 #include <vfs/puffs/puffs_sys.h>
 
@@ -320,10 +321,10 @@ puffs_getmsgid(struct puffs_mount *pmp)
 void
 puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 {
-	struct lwp *l = curlwp;
+	struct thread *td = curthread;
 	struct mount *mp;
-	struct puffs_req *preq, *creq;
-	ssize_t delta;
+	struct puffs_req *preq;
+	sigset_t ss;
 
 	/*
 	 * Some clients reuse a park, so reset some flags.  We might
@@ -346,8 +347,9 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 		preq->preq_id = puffs_getmsgid(pmp);
 
 	/* fill in caller information */
-	preq->preq_pid = l->l_proc->p_pid;
-	preq->preq_lid = l->l_lid;
+	KKASSERT(td->td_proc != NULL && td->td_lwp != NULL);
+	preq->preq_pid = td->td_proc->p_pid;
+	preq->preq_lid = td->td_lwp->lwp_tid;
 
 	/*
 	 * To support cv_sig, yet another movie: check if there are signals
@@ -356,20 +358,20 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	 * convert it to a FAF, fire off to the file server and return
 	 * an error.  Yes, this is bordering disgusting.  Barfbags are on me.
 	 */
+	ss = lwp_sigpend(td->td_lwp);
+	SIGSETNAND(ss, td->td_lwp->lwp_sigmask);
 	if (__predict_false((park->park_flags & PARKFLAG_WANTREPLY)
 	   && (park->park_flags & PARKFLAG_CALL) == 0
-	   && (l->l_flag & LW_PENDSIG) != 0 && sigispending(l, 0))) {
-		sigset_t ss;
+	   && SIGNOTEMPTY(ss))) {
 
 		/*
 		 * see the comment about signals in puffs_msg_wait.
 		 */
-		sigpending1(l, &ss);
-		if (sigismember(&ss, SIGINT) ||
-		    sigismember(&ss, SIGTERM) ||
-		    sigismember(&ss, SIGKILL) ||
-		    sigismember(&ss, SIGHUP) ||
-		    sigismember(&ss, SIGQUIT)) {
+		if (SIGISMEMBER(ss, SIGINT) ||
+		    SIGISMEMBER(ss, SIGTERM) ||
+		    SIGISMEMBER(ss, SIGKILL) ||
+		    SIGISMEMBER(ss, SIGHUP) ||
+		    SIGISMEMBER(ss, SIGQUIT)) {
 			park->park_flags |= PARKFLAG_HASERROR;
 			preq->preq_rv = EINTR;
 			if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_VN
@@ -420,11 +422,13 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 int
 puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 {
-	lwp_t *l = curlwp;
-	proc_t *p = l->l_proc;
 	struct puffs_req *preq = park->park_preq; /* XXX: hmmm */
+#ifdef XXXDF
+	struct lwp *l = curthread->td_lwp;
+	struct proc *p = curthread->td_proc;
 	sigset_t ss;
 	sigset_t oss;
+#endif
 	int error = 0;
 	int rv;
 
@@ -434,15 +438,17 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	 * The set of "important" signals here was chosen to be same as
 	 * nfs interruptible mount.
 	 */
-	sigfillset(&ss);
-	sigdelset(&ss, SIGINT);
-	sigdelset(&ss, SIGTERM);
-	sigdelset(&ss, SIGKILL);
-	sigdelset(&ss, SIGHUP);
-	sigdelset(&ss, SIGQUIT);
+#ifdef XXXDF
+	SIGFILLSET(ss);
+	SIGDELSET(ss, SIGINT);
+	SIGDELSET(ss, SIGTERM);
+	SIGDELSET(ss, SIGKILL);
+	SIGDELSET(ss, SIGHUP);
+	SIGDELSET(ss, SIGQUIT);
 	lockmgr(p->p_lock, LK_EXCLUSIVE);
 	sigprocmask1(l, SIG_BLOCK, &ss, &oss);
 	lockmgr(p->p_lock, LK_RELEASE);
+#endif
 
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	puffs_mp_reference(pmp);
@@ -517,9 +523,11 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	puffs_mp_release(pmp);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
+#ifdef XXXDF
 	lockmgr(p->p_lock, LK_EXCLUSIVE);
 	sigprocmask1(l, SIG_SETMASK, &oss, NULL);
 	lockmgr(p->p_lock, LK_RELEASE);
+#endif
 
 	return rv;
 }
@@ -800,15 +808,21 @@ static void
 puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 {
 	struct vnode *vp;
+#ifdef XXXDF
 	voff_t offlo, offhi;
 	int rv, flags = 0;
+#endif
+	int rv;
 
 	KKASSERT(pf->pf_req.preq_pth.pth_framelen == sizeof(struct puffs_flush));
 
 	/* XXX: slurry */
 	if (pf->pf_op == PUFFS_INVAL_NAMECACHE_ALL) {
+#ifdef XXXDF
 		cache_purgevfs(PMPTOMP(pmp));
 		rv = 0;
+#endif
+		rv = ENOTSUP;
 		goto out;
 	}
 
@@ -848,6 +862,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 		cache_purge(vp);
 		break;
 
+#ifdef XXXDF
 	case PUFFS_INVAL_PAGECACHE_NODE_RANGE:
 		flags = PGO_FREE;
 		/*FALLTHROUGH*/
@@ -870,6 +885,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 		lockmgr(&vp->v_uobj.vmobjlock, LK_EXCLUSIVE);
 		rv = VOP_PUTPAGES(vp, offlo, offhi, flags);
 		break;
+#endif
 
 	default:
 		rv = EINVAL;
