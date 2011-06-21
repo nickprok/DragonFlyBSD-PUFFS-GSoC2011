@@ -43,7 +43,7 @@
 MALLOC_DEFINE(M_PUFFS, "puffs", "PUFFS");
 
 #ifdef PUFFSDEBUG
-int puffsdebug;
+int puffsdebug = 1;
 #endif
 
 void

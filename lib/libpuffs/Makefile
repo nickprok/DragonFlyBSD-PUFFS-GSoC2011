@@ -18,5 +18,6 @@ INCS=		puffs.h puffsdump.h
 INCSDIR=	/usr/include
 LINTFLAGS+=-S -w
 CFLAGS+=	-I${.CURDIR}/../../sys -I/usr/src/sbin/mount
+DEBUG_FLAGS=	-O0 -g
 
 .include <bsd.lib.mk>
