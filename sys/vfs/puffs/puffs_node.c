@@ -309,6 +309,7 @@ puffs_makeroot(struct puffs_mount *pmp)
 	/* store cache */
 	vsetflags(vp, VROOT);
 	pmp->pmp_root = vp;
+	vref(vp);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	return 0;

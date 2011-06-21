@@ -318,7 +318,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 	 * should userspace unmount decide it doesn't want to
 	 * cooperate.
 	 */
-	error = vflush(mp, 0, force ? FORCECLOSE : 0);
+	error = vflush(mp, 1, force ? FORCECLOSE : 0);
 	if (error)
 		goto out;
 
