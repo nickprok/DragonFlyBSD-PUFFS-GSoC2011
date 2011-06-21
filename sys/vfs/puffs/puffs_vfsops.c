@@ -72,26 +72,15 @@ static struct putter_ops puffs_putter = {
 	.pop_close	= puffs_msgif_close,
 };
 
-int
-puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
-	size_t *data_len)
+static int
+puffs_vfsop_mount(struct mount *mp, char *path, char *data,
+	struct ucred *cred)
 {
 	struct puffs_mount *pmp = NULL;
-	struct puffs_kargs *args;
-	char fstype[_VFS_NAMELEN];
+	struct puffs_kargs *args, kargs;
 	char *p;
 	int error = 0, i;
-	pid_t mntpid = curlwp->l_proc->p_pid;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
-
-	if (mp->mnt_flag & MNT_GETARGS) {
-		pmp = MPTOPUFFSMP(mp);
-		*(struct puffs_kargs *)data = pmp->pmp_args;
-		*data_len = sizeof *args;
-		return 0;
-	}
+	pid_t mntpid = curproc->p_pid;
 
 	/* update is not supported currently */
 	if (mp->mnt_flag & MNT_UPDATE)
@@ -103,29 +92,30 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	if (!data)
 		return EINVAL;
 
-	args = (struct puffs_kargs *)data;
+	copyin(data, &kargs, sizeof(kargs));
+	args = &kargs;
 
 	if (args->pa_vers != PUFFSVERSION) {
-		printf("puffs_mount: development version mismatch: "
+		kprintf("puffs_mount: development version mismatch: "
 		    "kernel %d, lib %d\n", PUFFSVERSION, args->pa_vers);
 		error = EINVAL;
 		goto out;
 	}
 
 	if ((args->pa_flags & ~PUFFS_KFLAG_MASK) != 0) {
-		printf("puffs_mount: invalid KFLAGs 0x%x\n", args->pa_flags);
+		kprintf("puffs_mount: invalid KFLAGs 0x%x\n", args->pa_flags);
 		error = EINVAL;
 		goto out;
 	}
 	if ((args->pa_fhflags & ~PUFFS_FHFLAG_MASK) != 0) {
-		printf("puffs_mount: invalid FHFLAGs 0x%x\n", args->pa_fhflags);
+		kprintf("puffs_mount: invalid FHFLAGs 0x%x\n", args->pa_fhflags);
 		error = EINVAL;
 		goto out;
 	}
 
 	for (i = 0; i < __arraycount(args->pa_spare); i++) {
 		if (args->pa_spare[i] != 0) {
-			printf("puffs_mount: pa_spare[%d] = 0x%x\n",
+			kprintf("puffs_mount: pa_spare[%d] = 0x%x\n",
 			    i, args->pa_spare[i]);
 			error = EINVAL;
 			goto out;
@@ -134,11 +124,11 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 
 	/* use dummy value for passthrough */
 	if (args->pa_fhflags & PUFFS_FHFLAG_PASSTHROUGH)
-		args->pa_fhsize = sizeof(struct fid);
+		args->pa_fhsize = MAXFIDSZ;
 
 	/* sanitize file handle length */
-	if (PUFFS_TOFHSIZE(args->pa_fhsize) > FHANDLE_SIZE_MAX) {
-		printf("puffs_mount: handle size %zu too large\n",
+	if (PUFFS_TOFHSIZE(args->pa_fhsize) > sizeof(struct fid)) {
+		kprintf("puffs_mount: handle size %zu too large\n",
 		    args->pa_fhsize);
 		error = EINVAL;
 		goto out;
@@ -148,8 +138,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 		size_t kfhsize = PUFFS_TOFHSIZE(args->pa_fhsize);
 
 		if (args->pa_fhflags & PUFFS_FHFLAG_NFSV2) {
-			if (NFSX_FHTOOBIG_P(kfhsize, 0)) {
-				printf("puffs_mount: fhsize larger than "
+			if (kfhsize > NFSX_FH(0)) {
+				kprintf("puffs_mount: fhsize larger than "
 				    "NFSv2 max %d\n",
 				    PUFFS_FROMFHSIZE(NFSX_V2FH));
 				error = EINVAL;
@@ -158,8 +148,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 		}
 
 		if (args->pa_fhflags & PUFFS_FHFLAG_NFSV3) {
-			if (NFSX_FHTOOBIG_P(kfhsize, 1)) {
-				printf("puffs_mount: fhsize larger than "
+			if (kfhsize > NFSX_FH(1)) {
+				kprintf("puffs_mount: fhsize larger than "
 				    "NFSv3 max %d\n",
 				    PUFFS_FROMFHSIZE(NFSX_V3FHMAX));
 				error = EINVAL;
@@ -180,8 +170,14 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 			*p = '.';
 
 	/* build real name */
-	(void)strlcpy(fstype, PUFFS_TYPEPREFIX, sizeof(fstype));
-	(void)strlcat(fstype, args->pa_typename, sizeof(fstype));
+	bzero(mp->mnt_stat.f_fstypename, MFSNAMELEN);
+	(void)strlcpy(mp->mnt_stat.f_fstypename, PUFFS_TYPEPREFIX, MFSNAMELEN);
+	(void)strlcat(mp->mnt_stat.f_fstypename, args->pa_typename, MFSNAMELEN);
+
+	bzero(mp->mnt_stat.f_mntfromname, MNAMELEN);
+	strlcpy(mp->mnt_stat.f_mntfromname, args->pa_mntfromname, MFSNAMELEN);
+	bzero(mp->mnt_stat.f_mntonname, MNAMELEN);
+	copyinstr(path, mp->mnt_stat.f_mntonname, MNAMELEN, NULL);
 
 	/* inform user server if it got the max request size it wanted */
 	if (args->pa_maxmsglen == 0 || args->pa_maxmsglen > PUFFS_MSG_MAXSIZE)
@@ -189,40 +185,27 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	else if (args->pa_maxmsglen < 2*PUFFS_MSGSTRUCT_MAX)
 		args->pa_maxmsglen = 2*PUFFS_MSGSTRUCT_MAX;
 
-	(void)strlcpy(args->pa_typename, fstype, sizeof(args->pa_typename));
-
 	if (args->pa_nhashbuckets == 0)
 		args->pa_nhashbuckets = puffs_pnodebuckets_default;
 	if (args->pa_nhashbuckets < 1)
 		args->pa_nhashbuckets = 1;
 	if (args->pa_nhashbuckets > PUFFS_MAXPNODEBUCKETS) {
 		args->pa_nhashbuckets = puffs_maxpnodebuckets;
-		printf("puffs_mount: using %d hash buckets. "
+		kprintf("puffs_mount: using %d hash buckets. "
 		    "adjust puffs_maxpnodebuckets for more\n",
 		    puffs_maxpnodebuckets);
 	}
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args->pa_mntfromname,
-	    UIO_SYSSPACE, fstype, mp, curlwp);
-	if (error)
-		goto out;
 	mp->mnt_stat.f_iosize = DEV_BSIZE;
-	mp->mnt_stat.f_namemax = args->pa_svfsb.f_namemax;
-
-	/*
-	 * We can't handle the VFS_STATVFS() mount_domount() does
-	 * after VFS_MOUNT() because we'd deadlock, so handle it
-	 * here already.
-	 */
-	copy_statvfs_info(&args->pa_svfsb, mp);
-	(void)memcpy(&mp->mnt_stat, &args->pa_svfsb, sizeof(mp->mnt_stat));
+	mp->mnt_stat.f_bsize = DEV_BSIZE;
+	mp->mnt_vstat.f_frsize = DEV_BSIZE;
+	mp->mnt_vstat.f_bsize = DEV_BSIZE;
+	mp->mnt_vstat.f_namemax = args->pa_svfsb.f_namemax;
 
 	pmp = kmalloc(sizeof(struct puffs_mount), M_PUFFS, M_ZERO | M_WAITOK);
 
-	mp->mnt_fs_bshift = DEV_BSHIFT;
-	mp->mnt_dev_bshift = DEV_BSHIFT;
 	mp->mnt_flag &= ~MNT_LOCAL; /* we don't really know, so ... */
-	mp->mnt_data = pmp;
+	mp->mnt_data = (qaddr_t)pmp;
 
 #if 0
 	/*
@@ -288,8 +271,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	TAILQ_INIT(&pmp->pmp_msg_replywait);
 	TAILQ_INIT(&pmp->pmp_sopreqs);
 
-	if ((error = kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL,
-	    puffs_sop_thread, pmp, NULL, "puffsop")) != 0)
+	if ((error = kthread_create(puffs_sop_thread, pmp, NULL,
+	    "puffsop")) != 0)
 		goto out;
 	pmp->pmp_sopthrcount = 1;
 
@@ -297,6 +280,11 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	    mp, MPTOPUFFSMP(mp)));
 
 	vfs_getnewfsid(mp);
+
+	vfs_add_vnodeops(mp, &puffs_vnode_vops, &mp->mnt_vn_norm_ops);
+#ifdef XXXDF
+	vfs_add_vnodeops(mp, &puffs_fifo_vops, &mp->mnt_vn_fifo_ops);
+#endif
 
  out:
 	if (error && pmp && pmp->pmp_pi)
@@ -330,7 +318,7 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 	 * should userspace unmount decide it doesn't want to
 	 * cooperate.
 	 */
-	error = vflush(mp, NULLVP, force ? FORCECLOSE : 0);
+	error = vflush(mp, 0, force ? FORCECLOSE : 0);
 	if (error)
 		goto out;
 
@@ -446,8 +434,8 @@ puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 	return rv;
 }
 
-int
-puffs_vfsop_statvfs(struct mount *mp, struct statvfs *sbp)
+static int
+puffs_vfsop_statvfs(struct mount *mp, struct statvfs *sbp, struct ucred *cred)
 {
 	PUFFS_MSG_VARS(vfs, statvfs);
 	struct puffs_mount *pmp;
@@ -469,7 +457,7 @@ puffs_vfsop_statvfs(struct mount *mp, struct statvfs *sbp)
 
 	PUFFS_MSG_ENQUEUEWAIT(pmp, park_statvfs, error);
 	error = checkerr(pmp, error, __func__);
-	statvfs_msg->pvfsr_sb.f_iosize = DEV_BSIZE;
+	statvfs_msg->pvfsr_sb.f_bsize = DEV_BSIZE;
 
 	/*
 	 * Try to produce a sensible result even in the event
@@ -478,17 +466,18 @@ puffs_vfsop_statvfs(struct mount *mp, struct statvfs *sbp)
 	 * XXX: cache the copy in non-error case
 	 */
 	if (!error) {
-		copy_statvfs_info(&statvfs_msg->pvfsr_sb, mp);
 		(void)memcpy(sbp, &statvfs_msg->pvfsr_sb,
 		    sizeof(struct statvfs));
 	} else {
-		copy_statvfs_info(sbp, mp);
+		(void)memcpy(sbp, &mp->mnt_stat,
+		    sizeof(struct statvfs));
 	}
 
 	PUFFS_MSG_RELEASE(statvfs);
 	return error;
 }
 
+#ifdef XXXDF
 static int
 pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 {

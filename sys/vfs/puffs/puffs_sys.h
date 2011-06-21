@@ -44,14 +44,8 @@
 
 MALLOC_DECLARE(M_PUFFS);
 
-extern int (**puffs_vnodeop_p)(void *);
-extern int (**puffs_specop_p)(void *);
-extern int (**puffs_fifoop_p)(void *);
-
-extern const struct vnodeopv_desc puffs_vnodeop_opv_desc;
-extern const struct vnodeopv_desc puffs_specop_opv_desc;
-extern const struct vnodeopv_desc puffs_fifoop_opv_desc;
-extern const struct vnodeopv_desc puffs_msgop_opv_desc;
+extern struct vop_ops puffs_vnode_vops;
+extern struct vop_ops puffs_fifo_vops;
 
 #ifdef DEBUG
 #ifndef PUFFSDEBUG
@@ -61,8 +55,8 @@ extern const struct vnodeopv_desc puffs_msgop_opv_desc;
 
 #ifdef PUFFSDEBUG
 extern int puffsdebug; /* puffs_subr.c */
-#define DPRINTF(x) if (puffsdebug > 0) printf x
-#define DPRINTF_VERBOSE(x) if (puffsdebug > 1) printf x
+#define DPRINTF(x) if (puffsdebug > 0) kprintf x
+#define DPRINTF_VERBOSE(x) if (puffsdebug > 1) kprintf x
 #else
 #define DPRINTF(x)
 #define DPRINTF_VERBOSE(x)
