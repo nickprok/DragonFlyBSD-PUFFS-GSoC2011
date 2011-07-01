@@ -331,6 +331,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	 * want to provide a caller-side interface for this and add
 	 * a few more invariant checks here, but this will do for now.
 	 */
+	KKASSERT(pmp != NULL && park != NULL);
 	park->park_flags &= ~(PARKFLAG_DONE | PARKFLAG_HASERROR);
 	KKASSERT((park->park_flags & PARKFLAG_WAITERGONE) == 0);
 
@@ -347,7 +348,12 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 		preq->preq_id = puffs_getmsgid(pmp);
 
 	/* fill in caller information */
-	KKASSERT(td->td_proc != NULL && td->td_lwp != NULL);
+	if (td->td_proc == NULL || td->td_lwp == NULL) {
+		DPRINTF(("puffs_msg_enqueue: no process\n"));
+		preq->preq_pid = 1;
+		preq->preq_lid = 0;
+		goto noproc;
+	}
 	preq->preq_pid = td->td_proc->p_pid;
 	preq->preq_lid = td->td_lwp->lwp_tid;
 
@@ -388,6 +394,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 		}
 	}
 
+ noproc:
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	if (pmp->pmp_status != PUFFSTAT_RUNNING) {
 		lockmgr(&pmp->pmp_lock, LK_RELEASE);
@@ -431,6 +438,8 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 #endif
 	int error = 0;
 	int rv;
+
+	KKASSERT(pmp != NULL && park != NULL);
 
 	/*
 	 * block unimportant signals.
