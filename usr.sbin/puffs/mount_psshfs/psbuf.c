@@ -26,9 +26,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: psbuf.c,v 1.18 2010/01/08 10:53:31 pooka Exp $");
-#endif /* !lint */
 
 /*
  * buffering functions for network input/output.  slightly different
@@ -37,17 +34,19 @@ __RCSID("$NetBSD: psbuf.c,v 1.18 2010/01/08 10:53:31 pooka Exp $");
  */
 
 #include <sys/types.h>
+#include <sys/endian.h>
 #include <sys/time.h>
+#include <sys/socket.h>
 #include <sys/vnode.h>
 
 #include <err.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <util.h>
 #include <unistd.h>
 
 #include "psshfs.h"
 #include "sftp_proto.h"
+#include "util_compat.h"
 
 #define FAILRV(x) do { int rv; if ((rv=x)) return (rv); } while (/*CONSTCOND*/0)
 #define READSTATE_LENGTH(off) (off < 4)
@@ -57,6 +56,13 @@ __RCSID("$NetBSD: psbuf.c,v 1.18 2010/01/08 10:53:31 pooka Exp $");
 #define SFTP_REQIDOFF	5
 
 #define CHECK(v) if (!(v)) abort()
+
+#define HTOBE16(x)	(x) = htobe16((uint16_t)(x))
+#define HTOBE32(x)	(x) = htobe32((uint32_t)(x))
+#define HTOBE64(x)	(x) = htobe64((uint64_t)(x))
+#define BE16TOH(x)	(x) = be16toh((uint16_t)(x))
+#define BE32TOH(x)	(x) = be32toh((uint32_t)(x))
+#define BE64TOH(x)	(x) = be64toh((uint64_t)(x))
 
 uint8_t
 psbuf_get_type(struct puffs_framebuf *pb)
@@ -369,6 +375,7 @@ psbuf_get_vattr(struct puffs_framebuf *pb, struct vattr *vap)
 {
 	uint32_t flags;
 	uint32_t val;
+	uint32_t tmpval;
 
 	puffs_vattr_null(vap);
 
@@ -383,7 +390,8 @@ psbuf_get_vattr(struct puffs_framebuf *pb, struct vattr *vap)
 		FAILRV(psbuf_get_4(pb, &vap->va_gid));
 	}
 	if (flags & SSH_FILEXFER_ATTR_PERMISSIONS) {
-		FAILRV(psbuf_get_4(pb, &vap->va_mode));
+		FAILRV(psbuf_get_4(pb, &tmpval));
+		vap->va_mode = tmpval;
 		vap->va_type = puffs_mode2vt(vap->va_mode);
 	}
 	if (flags & SSH_FILEXFER_ATTR_ACCESSTIME) {

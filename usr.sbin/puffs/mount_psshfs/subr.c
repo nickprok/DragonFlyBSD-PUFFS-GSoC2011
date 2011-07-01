@@ -26,19 +26,17 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: subr.c,v 1.50 2010/04/01 02:34:09 pooka Exp $");
-#endif /* !lint */
 
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <puffs.h>
 #include <stdlib.h>
-#include <util.h>
 
 #include "psshfs.h"
 #include "sftp_proto.h"
+#include "util_compat.h"
 
 static void
 freedircache(struct psshfs_dir *base, size_t count)
@@ -265,6 +263,7 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 	struct puffs_framebuf *pb;
 	uint32_t reqid = NEXTREQ(pctx);
 	uint32_t count, dhandlen;
+	int tmpval;
 	char *dhand = NULL;
 	size_t nent;
 	char *longname = NULL;
@@ -338,10 +337,11 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 			if ((rv = psbuf_get_vattr(pb, &psn->dir[idx].va)) != 0)
 				goto out;
 			if (sscanf(longname, "%*s%d",
-			    &psn->dir[idx].va.va_nlink) != 1) {
+			    &tmpval) != 1) {
 				rv = EPROTO;
 				goto out;
 			}
+			psn->dir[idx].va.va_nlink = tmpval;
 			free(longname);
 			longname = NULL;
 			

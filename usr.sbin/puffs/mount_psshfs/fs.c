@@ -26,9 +26,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: fs.c,v 1.23 2010/10/29 16:13:51 pooka Exp $");
-#endif /* !lint */
 
 #include <err.h>
 #include <errno.h>
@@ -46,7 +43,7 @@ do {									\
 	puffs_framebuf_seekset(a2, 0);					\
 	*(a4) = 0;							\
 	rv = fname(a1, a2, a3, a4);					\
-	if (rv || a4 == 0) {						\
+	if (rv || *(a4) == 0) {						\
 		return rv ? rv : EPROTO;				\
 	}								\
 } while (/*CONSTCOND*/0)
@@ -178,7 +175,7 @@ psshfs_fs_statvfs(struct puffs_usermount *pu, struct statvfs *sbp)
 	uint8_t type;
 
 	memset(sbp, 0, sizeof(*sbp));
-	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = 512;
+	sbp->f_bsize = sbp->f_frsize = 512;
 
 	if ((pctx->extensions & SFTP_EXT_STATVFS) == 0)
 		goto out;
@@ -209,8 +206,10 @@ psshfs_fs_statvfs(struct puffs_usermount *pu, struct statvfs *sbp)
 	psbuf_get_8(pb, &tmpval);
 	sbp->f_namemax = tmpval;
 
+#ifdef XXXDF
 	sbp->f_bresvd = sbp->f_bfree - sbp->f_bavail;
 	sbp->f_fresvd = sbp->f_ffree - sbp->f_favail;
+#endif
 
  out:
 	PSSHFSRETURN(rv);

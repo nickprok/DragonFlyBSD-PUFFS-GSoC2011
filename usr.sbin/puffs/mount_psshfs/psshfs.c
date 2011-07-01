@@ -40,26 +40,26 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: psshfs.c,v 1.62 2010/10/29 16:13:51 pooka Exp $");
-#endif /* !lint */
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
 
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
-#include <mntopts.h>
 #include <paths.h>
 #include <poll.h>
 #include <puffs.h>
 #include <signal.h>
 #include <stdlib.h>
-#include <util.h>
+#include <stdio.h>
 #include <unistd.h>
 
 #include "psshfs.h"
+#include "util_compat.h"
 
 static int	pssh_connect(struct puffs_usermount *, int);
 static void	psshfs_loopfn(struct puffs_usermount *);
@@ -111,7 +111,6 @@ main(int argc, char *argv[])
 	struct puffs_node *pn_root;
 	puffs_framev_fdnotify_fn notfn;
 	struct vattr *rva;
-	mntoptparse_t mp;
 	char **sshargs;
 	char *userhost;
 	char *hostpath;
@@ -168,10 +167,7 @@ main(int argc, char *argv[])
 			add_ssharg(&sshargs, &nargs, optarg);
 			break;
 		case 'o':
-			mp = getmntopts(optarg, puffsmopts, &mntflags, &pflags);
-			if (mp == NULL)
-				err(1, "getmntopts");
-			freemntopts(mp);
+			getmntopts(optarg, puffsmopts, &mntflags, &pflags);
 			break;
 		case 'p':
 			notfn = psshfs_notify;

@@ -26,9 +26,6 @@
  */
 
 #include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: node.c,v 1.62 2010/10/29 16:13:51 pooka Exp $");
-#endif /* !lint */
 
 #include <assert.h>
 #include <errno.h>
