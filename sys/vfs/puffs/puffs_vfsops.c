@@ -423,14 +423,6 @@ puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 	rv = puffs_cookie2vnode(pmp, pmp->pmp_root_cookie, 1, 1, vpp);
 	KKASSERT(rv != PUFFS_NOSUCHCOOKIE);
 
-	if (rv == 0) {
-		/* puffs_vfsop_start */
-		lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
-		if (pmp->pmp_status == PUFFSTAT_MOUNTING)
-			pmp->pmp_status = PUFFSTAT_RUNNING;
-		lockmgr(&pmp->pmp_lock, LK_RELEASE);
-	}
-
 	return rv;
 }
 
@@ -565,12 +557,13 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 static int
 puffs_vfsop_sync(struct mount *mp, int waitfor)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, sync);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error, rv;
 
+#ifdef XXXDF
 	error = pageflush(mp, cred, waitfor);
+#endif
 
 	/* sync fs */
 	PUFFS_MSG_ALLOC(vfs, sync);
@@ -578,22 +571,18 @@ puffs_vfsop_sync(struct mount *mp, int waitfor)
 	puffs_msg_setinfo(park_sync, PUFFSOP_VFS, PUFFS_VFS_SYNC, NULL);
 
 	PUFFS_MSG_ENQUEUEWAIT(pmp, park_sync, rv);
-	rv = checkerr(pmp, rv, __func__);
-	if (rv)
-		error = rv;
+	error = checkerr(pmp, rv, __func__);
 
 	PUFFS_MSG_RELEASE(sync);
-#else
-	int error = ENOTSUP;
-#endif
+	DPRINTF(("puffs_vfsop_sync: result %d\n", error));
 	return error;
 }
 
+#ifdef XXXDF
 static int
 puffs_vfsop_fhtovp(struct mount *mp, struct vnode *rootvp, struct fid *fhp,
     struct vnode **vpp)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, fhtonode);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	struct vnode *vp;
@@ -647,16 +636,12 @@ puffs_vfsop_fhtovp(struct mount *mp, struct vnode *rootvp, struct fid *fhp,
 	*vpp = vp;
  out:
 	puffs_msgmem_release(park_fhtonode);
-#else
-	int error = ENOTSUP;
-#endif
 	return error;
 }
 
 static int
 puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, nodetofh);
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	size_t argsize, fhlen;
@@ -726,10 +711,19 @@ puffs_vfsop_vptofh(struct vnode *vp, struct fid *fhp)
 
  out:
 	puffs_msgmem_release(park_nodetofh);
-#else
-	int error = ENOTSUP;
-#endif
 	return error;
+}
+#endif
+
+static int
+puffs_vfsop_start(struct mount *mp, int flags)
+{
+	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
+
+	KKASSERT(pmp->pmp_status == PUFFSTAT_MOUNTING);
+	pmp->pmp_status = PUFFSTAT_RUNNING;
+
+	return 0;
 }
 
 static int
@@ -751,11 +745,11 @@ puffs_vfsop_uninit(struct vfsconf *vfc)
 	return 0;
 }
 
+#ifdef XXXDF
 static int
 puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 	int attrnamespace, const char *attrname, struct ucred *cred)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vfs, extattrctl);
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	struct puffs_node *pnp;
@@ -800,9 +794,8 @@ puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 	}
 
 	return checkerr(pmp, error, __func__);
-#endif
-	return ENOTSUP;
 }
+#endif
 
 static struct vfsops puffs_vfsops = {
 	.vfs_mount =		puffs_vfsop_mount,
@@ -810,9 +803,12 @@ static struct vfsops puffs_vfsops = {
 	.vfs_root =		puffs_vfsop_root,
 	.vfs_statvfs =		puffs_vfsop_statvfs,
 	.vfs_sync =		puffs_vfsop_sync,
+#ifdef XXXFD
 	.vfs_fhtovp =		puffs_vfsop_fhtovp,
 	.vfs_vptofh =		puffs_vfsop_vptofh,
 	.vfs_extattrctl =	puffs_vfsop_extattrctl,
+#endif
+	.vfs_start =		puffs_vfsop_start,
 	.vfs_init =		puffs_vfsop_init,
 	.vfs_uninit =		puffs_vfsop_uninit,
 };
