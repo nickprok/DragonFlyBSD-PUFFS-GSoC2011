@@ -151,12 +151,10 @@ puffs_vnop_checkop(void *v)
 }
 #endif
 
-#ifdef XXXDF
 static int callremove(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			    struct componentname *);
 static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
-#endif
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
 static int  flushvncache(struct vnode *, off_t, off_t, boolean_t);
@@ -176,7 +174,6 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
 	puffs_cookie_t dck, puffs_cookie_t ck, struct componentname *cnp)
 {
 
-#ifdef XXXDF
 	switch (what) {
 	case PUFFS_ABORT_CREATE:
 	case PUFFS_ABORT_MKNOD:
@@ -187,7 +184,6 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
 		callrmdir(pmp, dck, ck, cnp);
 		break;
 	}
-#endif
 
 	callinactive(pmp, ck, 0);
 	callreclaim(pmp, ck);
@@ -321,12 +317,13 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 	return error;
 }
 
+#ifdef XXXDF
 #define REFPN_AND_UNLOCKVP(a, b)					\
 do {									\
 	lockmgr(&b->pn_mtx, LK_EXCLUSIVE);				\
 	puffs_referencenode(b);						\
 	lockmgr(&b->pn_mtx, LK_RELEASE);				\
-	VOP_UNLOCK(a);						\
+	vn_unlock(a);						\
 } while (/*CONSTCOND*/0)
 
 #define REFPN(b)							\
@@ -341,12 +338,14 @@ do {									\
 	puffs_releasenode(b);						\
 	vrele(a);							\
 } while (/*CONSTCOND*/0)
+#endif
 
 static int
 puffs_vnop_create(struct vop_old_create_args *ap)
 {
 	PUFFS_MSG_VARS(vn, create);
 	struct vnode *dvp = ap->a_dvp;
+	struct vattr *vap = ap->a_vap;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct componentname *cnp = ap->a_cnp;
 	struct mount *mp = dvp->v_mount;
@@ -355,6 +354,9 @@ puffs_vnop_create(struct vop_old_create_args *ap)
 
 	DPRINTF(("puffs_create: dvp %p, cnp: %s\n",
 	    dvp, ap->a_cnp->cn_nameptr));
+
+	if (vap->va_type != VREG && vap->va_type != VSOCK)
+		return EINVAL;
 
 	PUFFS_MSG_ALLOC(vn, create);
 	puffs_makecn(&create_msg->pvnr_cn, &create_msg->pvnr_cn_cred,
@@ -369,13 +371,15 @@ puffs_vnop_create(struct vop_old_create_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    create_msg->pvnr_newnode, cnp, ap->a_vap->va_type, 0);
+	    create_msg->pvnr_newnode, cnp, vap->va_type, 0);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_CREATE, dpn->pn_cookie,
 		    create_msg->pvnr_newnode, cnp);
 
  out:
+#ifdef XXXDF
 	vput(dvp);
+#endif
 
 	DPRINTF(("puffs_create: return %d\n", error));
 	PUFFS_MSG_RELEASE(create);
@@ -385,14 +389,20 @@ puffs_vnop_create(struct vop_old_create_args *ap)
 static int
 puffs_vnop_mknod(struct vop_old_mknod_args *ap)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vn, mknod);
 	struct vnode *dvp = ap->a_dvp;
+	struct vattr *vap = ap->a_vap;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct componentname *cnp = ap->a_cnp;
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error;
+
+	DPRINTF(("puffs_mknod: dvp %p, cnp: %s\n",
+	    dvp, ap->a_cnp->cn_nameptr));
+
+	if (vap->va_type != VFIFO)
+		return EINVAL;
 
 	PUFFS_MSG_ALLOC(vn, mknod);
 	puffs_makecn(&mknod_msg->pvnr_cn, &mknod_msg->pvnr_cn_cred,
@@ -408,8 +418,8 @@ puffs_vnop_mknod(struct vop_old_mknod_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    mknod_msg->pvnr_newnode, cnp, ap->a_vap->va_type,
-	    ap->a_vap->va_rdev);
+	    mknod_msg->pvnr_newnode, cnp, vap->va_type,
+	    makeudev(vap->va_rmajor, vap->va_rminor));
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_MKNOD, dpn->pn_cookie,
 		    mknod_msg->pvnr_newnode, cnp);
@@ -417,9 +427,6 @@ puffs_vnop_mknod(struct vop_old_mknod_args *ap)
  out:
 	vput(dvp);
 	PUFFS_MSG_RELEASE(mknod);
-#else
-	int error = ENOTSUP;
-#endif
 	return error;
 }
 
@@ -452,13 +459,14 @@ puffs_vnop_open(struct vop_open_args *ap)
  out:
 	DPRINTF(("puffs_open: returning %d\n", error));
 	PUFFS_MSG_RELEASE(open);
-	return error;
+	if (error)
+		return error;
+	return vop_stdopen(ap);
 }
 
 static int
 puffs_vnop_close(struct vop_close_args *ap)
 {
-#ifdef XXXDF
 	PUFFS_MSG_VARS(vn, close);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -471,8 +479,7 @@ puffs_vnop_close(struct vop_close_args *ap)
 
 	puffs_msg_enqueue(pmp, park_close);
 	PUFFS_MSG_RELEASE(close);
-#endif
-	return 0;
+	return vop_stdclose(ap);
 }
 
 static int
@@ -528,7 +535,9 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 	if (vp->v_type == VBLK || vp->v_type == VCHR)
 		return ENOTSUP;
 
+#ifdef XXXDF
 	REFPN(pn);
+#endif
 	vap = ap->a_vap;
 
 	PUFFS_MSG_ALLOC(vn, getattr);
@@ -564,7 +573,9 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 	}
 
  out:
+#ifdef XXXDF
 	puffs_releasenode(pn);
+#endif
 	PUFFS_MSG_RELEASE(getattr);
 	return error;
 }
@@ -631,24 +642,20 @@ dosetattr(struct vnode *vp, struct vattr *vap, struct ucred *cred, int flags)
 		error = 0;
 	}
 
-#ifdef XXXDF
 	if (vap->va_size != VNOVAL) {
 		pn->pn_serversize = vap->va_size;
 		if (flags & SETATTR_CHSIZE)
-			uvm_vnp_setsize(vp, vap->va_size);
+			vnode_pager_setsize(vp, vap->va_size);
 	}
-#endif
 
 	return 0;
 }
 
-#ifdef XXXDF
 static int
-puffs_vnop_setattr(struct vop_getattr_args *ap)
+puffs_vnop_setattr(struct vop_setattr_args *ap)
 {
 	return dosetattr(ap->a_vp, ap->a_vap, ap->a_cred, SETATTR_CHSIZE);
 }
-#endif
 
 static __inline int
 doinact(struct puffs_mount *pmp, int iaflag)
@@ -1069,6 +1076,7 @@ puffs_vnop_seek(void *v)
 	PUFFS_MSG_RELEASE(seek);
 	return checkerr(pmp, error, __func__);
 }
+#endif
 
 static int
 callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
@@ -1094,14 +1102,8 @@ callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
  * it due to lack of a pnode argument.
  */
 static int
-puffs_vnop_remove(void *v)
+puffs_vnop_remove(struct vop_old_remove_args *ap)
 {
-	struct vop_remove_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode *a_vp;
-		struct componentname *a_cnp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, remove);
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
@@ -1120,32 +1122,29 @@ puffs_vnop_remove(void *v)
 	    PUFFS_VN_REMOVE, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_remove);
+#ifdef XXXDF
 	REFPN_AND_UNLOCKVP(dvp, dpn);
 	if (dvp == vp)
 		REFPN(pn);
 	else
 		REFPN_AND_UNLOCKVP(vp, pn);
+#endif
 	error = puffs_msg_wait2(pmp, park_remove, dpn, pn);
 
 	PUFFS_MSG_RELEASE(remove);
 
+#ifdef XXXDF
 	RELEPN_AND_VP(dvp, dpn);
 	RELEPN_AND_VP(vp, pn);
+#endif
 
 	error = checkerr(pmp, error, __func__);
 	return error;
 }
 
 static int
-puffs_vnop_mkdir(void *v)
+puffs_vnop_mkdir(struct vop_old_mkdir_args *ap)
 {
-	struct vop_mkdir_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode **a_vpp;
-		struct componentname *a_cnp;
-		struct vattr *a_vap;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, mkdir);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
@@ -1174,7 +1173,9 @@ puffs_vnop_mkdir(void *v)
 		    mkdir_msg->pvnr_newnode, cnp);
 
  out:
+#ifdef XXXDF
 	vput(dvp);
+#endif
 	PUFFS_MSG_RELEASE(mkdir);
 	return error;
 }
@@ -1199,14 +1200,8 @@ callrmdir(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
 }
 
 static int
-puffs_vnop_rmdir(void *v)
+puffs_vnop_rmdir(struct vop_old_rmdir_args *ap)
 {
-	struct vop_rmdir_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode *a_vp;
-		struct componentname *a_cnp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, rmdir);
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
@@ -1224,36 +1219,37 @@ puffs_vnop_rmdir(void *v)
 	    PUFFS_VN_RMDIR, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_rmdir);
+#ifdef XXXDF
 	REFPN_AND_UNLOCKVP(dvp, dpn);
 	REFPN_AND_UNLOCKVP(vp, pn);
+#endif
 	error = puffs_msg_wait2(pmp, park_rmdir, dpn, pn);
 
 	PUFFS_MSG_RELEASE(rmdir);
 
 	/* XXX: some call cache_purge() *for both vnodes* here, investigate */
+#ifdef XXXDF
 	RELEPN_AND_VP(dvp, dpn);
 	RELEPN_AND_VP(vp, pn);
+#endif
 
 	return error;
 }
 
 static int
-puffs_vnop_link(void *v)
+puffs_vnop_link(struct vop_old_link_args *ap)
 {
-	struct vop_link_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode *a_vp;
-		struct componentname *a_cnp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, link);
-	struct vnode *dvp = ap->a_dvp;
+	struct vnode *dvp = ap->a_tdvp;
 	struct vnode *vp = ap->a_vp;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct puffs_node *pn = VPTOPP(vp);
 	struct puffs_mount *pmp = MPTOPUFFSMP(dvp->v_mount);
 	struct componentname *cnp = ap->a_cnp;
 	int error;
+
+	if (vp->v_mount != dvp->v_mount)
+		return EXDEV;
 
 	PUFFS_MSG_ALLOC(vn, link);
 	link_msg->pvnr_cookie_targ = VPTOPNC(vp);
@@ -1263,8 +1259,10 @@ puffs_vnop_link(void *v)
 	    PUFFS_VN_LINK, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_link);
+#ifdef XXXDF
 	REFPN_AND_UNLOCKVP(dvp, dpn);
 	REFPN(pn);
+#endif
 	error = puffs_msg_wait2(pmp, park_link, dpn, pn);
 
 	PUFFS_MSG_RELEASE(link);
@@ -1278,23 +1276,17 @@ puffs_vnop_link(void *v)
 	if (error == 0)
 		puffs_updatenode(pn, PUFFS_UPDATECTIME, 0);
 
+#ifdef XXXDF
 	RELEPN_AND_VP(dvp, dpn);
 	puffs_releasenode(pn);
+#endif
 
 	return error;
 }
 
 static int
-puffs_vnop_symlink(void *v)
+puffs_vnop_symlink(struct vop_old_symlink_args *ap)
 {
-	struct vop_symlink_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_dvp;
-		struct vnode **a_vpp;
-		struct componentname *a_cnp;
-		struct vattr *a_vap;
-		char *a_target;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, symlink);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
@@ -1327,21 +1319,17 @@ puffs_vnop_symlink(void *v)
 		    symlink_msg->pvnr_newnode, cnp);
 
  out:
+#ifdef XXXDF
 	vput(dvp);
+#endif
 	PUFFS_MSG_RELEASE(symlink);
 
 	return error;
 }
 
 static int
-puffs_vnop_readlink(void *v)
+puffs_vnop_readlink(struct vop_readlink_args *ap)
 {
-	struct vop_readlink_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, readlink);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(ap->a_vp->v_mount);
@@ -1368,7 +1356,7 @@ puffs_vnop_readlink(void *v)
 		goto out;
 	}
 
-	error = uiomove(&readlink_msg->pvnr_link, readlink_msg->pvnr_linklen,
+	error = uiomove(readlink_msg->pvnr_link, readlink_msg->pvnr_linklen,
 	    ap->a_uio);
  out:
 	PUFFS_MSG_RELEASE(readlink);
@@ -1376,17 +1364,8 @@ puffs_vnop_readlink(void *v)
 }
 
 static int
-puffs_vnop_rename(void *v)
+puffs_vnop_rename(struct vop_old_rename_args *ap)
 {
-	struct vop_rename_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_fdvp;
-		struct vnode *a_fvp;
-		struct componentname *a_fcnp;
-		struct vnode *a_tdvp;
-		struct vnode *a_tvp;
-		struct componentname *a_tcnp;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, rename);
 	struct vnode *fdvp = ap->a_fdvp, *fvp = ap->a_fvp;
 	struct vnode *tdvp = ap->a_tdvp, *tvp = ap->a_tvp;
@@ -1427,8 +1406,10 @@ puffs_vnop_rename(void *v)
 		puffs_updatenode(fpn, PUFFS_UPDATECTIME, 0);
 
  out:
+#ifdef XXXDF
 	if (doabort)
 		VOP_ABORTOP(tdvp, ap->a_tcnp);
+#endif
 	if (tvp != NULL)
 		vput(tvp);
 	if (tdvp == tvp)
@@ -1436,14 +1417,15 @@ puffs_vnop_rename(void *v)
 	else
 		vput(tdvp);
 
+#ifdef XXXDF
 	if (doabort)
 		VOP_ABORTOP(fdvp, ap->a_fcnp);
+#endif
 	vrele(fdvp);
 	vrele(fvp);
 
 	return error;
 }
-#endif
 
 #define RWARGS(cont, iofl, move, offset, creds)				\
 	(cont)->pvnr_ioflag = (iofl);					\
@@ -1547,7 +1529,6 @@ puffs_vnop_read(struct vop_read_args *ap)
 	return error;
 }
 
-#ifdef XXXDF
 /*
  * XXX: in case of a failure, this leaves uio in a bad state.
  * We could theoretically copy the uio and iovecs and "replay"
@@ -1555,28 +1536,26 @@ puffs_vnop_read(struct vop_read_args *ap)
  * bother for now.
  */
 static int
-puffs_vnop_write(void *v)
+puffs_vnop_write(struct vop_write_args *ap)
 {
-	struct vop_write_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, write);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct uio *uio = ap->a_uio;
 	size_t tomove, argsize;
+#ifdef XXXDF
 	off_t oldoff, newoff, origoff;
 	vsize_t bytelen;
 	int error, uflags;
 	int ubcflags;
+#else
+	int error, uflags;
+#endif
 
 	error = uflags = 0;
 	write_msg = NULL;
 
+#ifdef XXXDF
 	if (vp->v_type == VREG && PUFFS_USE_PAGECACHE(pmp)) {
 		ubcflags = UBC_WRITE | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp);
 
@@ -1653,6 +1632,9 @@ puffs_vnop_write(void *v)
 		}
 
 		puffs_updatenode(VPTOPP(vp), uflags, vp->v_size);
+#else
+	if (0) {
+#endif
 	} else {
 		/* tomove is non-increasing */
 		tomove = PUFFS_TOMOVE(uio->uio_resid, pmp);
@@ -1686,8 +1668,8 @@ puffs_vnop_write(void *v)
 			}
 
 			/* adjust file size */
-			if (vp->v_size < uio->uio_offset)
-				uvm_vnp_setsize(vp, uio->uio_offset);
+			if (vp->v_filesize < uio->uio_offset)
+				vnode_pager_setsize(vp, uio->uio_offset);
 
 			/* didn't move everything?  bad userspace.  bail */
 			if (write_msg->pvnr_resid != 0) {
@@ -1700,7 +1682,6 @@ puffs_vnop_write(void *v)
 
 	return error;
 }
-#endif
 
 static int
 puffs_vnop_print(struct vop_print_args *ap)
@@ -1732,14 +1713,8 @@ puffs_vnop_print(struct vop_print_args *ap)
 }
 
 static int
-puffs_vnop_pathconf(void *v)
+puffs_vnop_pathconf(struct vop_pathconf_args *ap)
 {
-	struct vop_pathconf_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_name;
-		register_t *a_retval;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, pathconf);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
@@ -2508,10 +2483,25 @@ puffs_vnop_fifo_write(void *v)
 struct vop_ops puffs_vnode_vops = {
 	.vop_default =			vop_defaultop,
 	.vop_old_lookup =		puffs_vnop_lookup,
+	.vop_old_create =		puffs_vnop_create,
+	.vop_old_mkdir =		puffs_vnop_mkdir,
+	.vop_old_rmdir =		puffs_vnop_rmdir,
+	.vop_old_remove =		puffs_vnop_remove,
+	.vop_old_rename =		puffs_vnop_rename,
+	.vop_old_link =			puffs_vnop_link,
+	.vop_old_symlink =		puffs_vnop_symlink,
+	.vop_old_mknod =		puffs_vnop_mknod,
 	.vop_access =			puffs_vnop_access,
 	.vop_getattr =			puffs_vnop_getattr,
+	.vop_setattr =			puffs_vnop_setattr,
 	.vop_readdir =			puffs_vnop_readdir,
+	.vop_open =			puffs_vnop_open,
+	.vop_close =			puffs_vnop_close,
+	.vop_read =			puffs_vnop_read,
+	.vop_write =			puffs_vnop_write,
+	.vop_readlink =			puffs_vnop_readlink,
 	.vop_inactive =			puffs_vnop_inactive,
 	.vop_reclaim =			puffs_vnop_reclaim,
+	.vop_pathconf =			puffs_vnop_pathconf,
 	.vop_print =			puffs_vnop_print,
 };

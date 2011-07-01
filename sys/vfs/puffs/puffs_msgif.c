@@ -891,7 +891,9 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 		rv = EINVAL;
 	}
 
+#ifdef XXXDF
 	vrele(vp);
+#endif
 
  out:
 	puffs_msg_sendresp(pmp, &pf->pf_req, rv);
