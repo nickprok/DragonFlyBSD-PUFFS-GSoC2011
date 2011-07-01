@@ -95,8 +95,7 @@ puffs_fsnop_unmount(struct puffs_usermount *dontuse1, int dontuse2)
 
 /*ARGSUSED*/
 int
-puffs_fsnop_sync(struct puffs_usermount *dontuse1, int dontuse2,
-	const struct puffs_cred *dontuse3)
+puffs_fsnop_sync(struct puffs_usermount *dontuse1, int dontuse2)
 {
 
 	return 0;

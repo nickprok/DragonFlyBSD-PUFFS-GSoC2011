@@ -575,7 +575,6 @@ puffs_vfsop_sync(struct mount *mp, int waitfor)
 	/* sync fs */
 	PUFFS_MSG_ALLOC(vfs, sync);
 	sync_msg->pvfsr_waitfor = waitfor;
-	puffs_credcvt(&sync_msg->pvfsr_cred, cred);
 	puffs_msg_setinfo(park_sync, PUFFSOP_VFS, PUFFS_VFS_SYNC, NULL);
 
 	PUFFS_MSG_ENQUEUEWAIT(pmp, park_sync, rv);

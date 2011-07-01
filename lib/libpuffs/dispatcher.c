@@ -184,10 +184,9 @@ dispatch(struct puffs_cc *pcc)
 		case PUFFS_VFS_SYNC:
 		{
 			struct puffs_vfsmsg_sync *auxt = auxbuf;
-			PUFFS_MAKECRED(pcr, &auxt->pvfsr_cred);
 
 			error = pops->puffs_fs_sync(pu,
-			    auxt->pvfsr_waitfor, pcr);
+			    auxt->pvfsr_waitfor);
 			break;
 		}
 
@@ -394,7 +393,6 @@ dispatch(struct puffs_cc *pcc)
 		case PUFFS_VN_CLOSE:
 		{
 			struct puffs_vnmsg_close *auxt = auxbuf;
-			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
 
 			if (pops->puffs_node_close == NULL) {
 				error = 0;
@@ -402,7 +400,7 @@ dispatch(struct puffs_cc *pcc)
 			}
 
 			error = pops->puffs_node_close(pu,
-			    opcookie, auxt->pvnr_fflag, pcr);
+			    opcookie, auxt->pvnr_fflag);
 			break;
 		}
 

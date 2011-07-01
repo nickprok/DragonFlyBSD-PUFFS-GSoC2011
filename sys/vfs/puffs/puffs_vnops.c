@@ -466,7 +466,6 @@ puffs_vnop_close(struct vop_close_args *ap)
 	PUFFS_MSG_ALLOC(vn, close);
 	puffs_msg_setfaf(park_close);
 	close_msg->pvnr_fflag = ap->a_fflag;
-	puffs_credcvt(&close_msg->pvnr_cred, ap->a_cred);
 	puffs_msg_setinfo(park_close, PUFFSOP_VN,
 	    PUFFS_VN_CLOSE, VPTOPNC(vp));
 

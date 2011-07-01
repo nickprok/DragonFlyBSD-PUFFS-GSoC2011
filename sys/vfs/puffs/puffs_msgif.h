@@ -305,7 +305,6 @@ struct puffs_vfsmsg_statvfs {
 struct puffs_vfsmsg_sync {
 	struct puffs_req	pvfsr_pr;
 
-	struct puffs_kcred	pvfsr_cred;
 	int			pvfsr_waitfor;
 };
 
@@ -399,7 +398,6 @@ struct puffs_vnmsg_open {
 struct puffs_vnmsg_close {
 	struct puffs_req	pvn_pr;
 
-	struct puffs_kcred	pvnr_cred;		/* OUT	*/
 	int			pvnr_fflag;		/* OUT	*/
 };
 

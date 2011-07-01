@@ -161,8 +161,7 @@ extern const struct mntopt puffsmopts[]; /* puffs.c */
 struct puffs_ops {
 	int (*puffs_fs_unmount)(struct puffs_usermount *, int);
 	int (*puffs_fs_statvfs)(struct puffs_usermount *, struct statvfs *);
-	int (*puffs_fs_sync)(struct puffs_usermount *, int,
-	    const struct puffs_cred *);
+	int (*puffs_fs_sync)(struct puffs_usermount *, int);
 	int (*puffs_fs_fhtonode)(struct puffs_usermount *, void *, size_t,
 	    struct puffs_newinfo *);
 	int (*puffs_fs_nodetofh)(struct puffs_usermount *, puffs_cookie_t,
@@ -181,7 +180,7 @@ struct puffs_ops {
 	int (*puffs_node_open)(struct puffs_usermount *,
 	    puffs_cookie_t, int, const struct puffs_cred *);
 	int (*puffs_node_close)(struct puffs_usermount *,
-	    puffs_cookie_t, int, const struct puffs_cred *);
+	    puffs_cookie_t, int);
 	int (*puffs_node_access)(struct puffs_usermount *,
 	    puffs_cookie_t, int, const struct puffs_cred *);
 	int (*puffs_node_getattr)(struct puffs_usermount *,
@@ -518,8 +517,7 @@ int			puffs_dispatch_exec(struct puffs_cc *,
 int  puffs_fsnop_unmount(struct puffs_usermount *, int);
 int  puffs_fsnop_statvfs(struct puffs_usermount *, struct statvfs *);
 void puffs_zerostatvfs(struct statvfs *);
-int  puffs_fsnop_sync(struct puffs_usermount *, int waitfor,
-		      const struct puffs_cred *);
+int  puffs_fsnop_sync(struct puffs_usermount *, int waitfor);
 
 int  puffs_genfs_node_getattr(struct puffs_usermount *, puffs_cookie_t,
 			      struct vattr *, const struct puffs_cred *);
