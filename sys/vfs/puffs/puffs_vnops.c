@@ -1734,17 +1734,9 @@ puffs_vnop_pathconf(struct vop_pathconf_args *ap)
 }
 
 #ifdef XXXDF
-int
-puffs_vnop_advlock(void *v)
+static int
+puffs_vnop_advlock(struct vop_advlock_args *ap)
 {
-	struct vop_advlock_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		void *a_id;
-		int a_op;
-		struct flock *a_fl;
-		int a_flags;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, advlock);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_node *pn = VPTOPP(vp);
@@ -1752,7 +1744,7 @@ puffs_vnop_advlock(void *v)
 	int error;
 
 	if (!EXISTSOP(pmp, ADVLOCK))
-		return lf_advlock(ap, &pn->pn_lockf, vp->v_size); 
+		return lf_advlock(ap, &pn->pn_lockf, vp->v_filesize); 
 	
 	PUFFS_MSG_ALLOC(vn, advlock);
 	(void)memcpy(&advlock_msg->pvnr_fl, ap->a_fl, 

@@ -36,6 +36,7 @@
 #include <sys/systm.h>
 #include <sys/condvar.h>
 #include <sys/lock.h>
+#include <sys/lockf.h>
 #include <sys/malloc.h>
 #include <sys/select.h>
 #include <sys/queue.h>
@@ -199,7 +200,7 @@ struct puffs_node {
 
 	voff_t		pn_serversize;
 
-	struct lockf *	pn_lockf;
+	struct lockf  	pn_lockf;
 
 	LIST_ENTRY(puffs_node) pn_hashent;
 };
