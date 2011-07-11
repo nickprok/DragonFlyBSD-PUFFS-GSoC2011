@@ -282,9 +282,7 @@ puffs_vfsop_mount(struct mount *mp, char *path, char *data,
 	vfs_getnewfsid(mp);
 
 	vfs_add_vnodeops(mp, &puffs_vnode_vops, &mp->mnt_vn_norm_ops);
-#ifdef XXXDF
 	vfs_add_vnodeops(mp, &puffs_fifo_vops, &mp->mnt_vn_fifo_ops);
-#endif
 
  out:
 	if (error && pmp && pmp->pmp_pi)

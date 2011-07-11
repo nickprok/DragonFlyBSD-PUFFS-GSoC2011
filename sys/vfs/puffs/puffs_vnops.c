@@ -2181,37 +2181,17 @@ puffs_vnop_getpages(void *v)
 
 	return error;
 }
-
-int
-puffs_vnop_fifo_read(void *v)
-{
-	struct vop_read_args /* { 
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-
-	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEATIME, 0);
-	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_read), v);
-}
-
-int
-puffs_vnop_fifo_write(void *v)
-{
-	struct vop_write_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct uio *a_uio;
-		int a_ioflag;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-
-	puffs_updatenode(VPTOPP(ap->a_vp), PUFFS_UPDATEMTIME, 0);
-	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_write), v);
-}
 #endif
+
+struct vop_ops puffs_fifo_vops = {
+	.vop_default =			fifo_vnoperate,
+	.vop_access =			puffs_vnop_access,
+	.vop_getattr =			puffs_vnop_getattr,
+	.vop_setattr =			puffs_vnop_setattr,
+	.vop_inactive =			puffs_vnop_inactive,
+	.vop_reclaim =			puffs_vnop_reclaim,
+	.vop_print =			puffs_vnop_print,
+};
 
 struct vop_ops puffs_vnode_vops = {
 	.vop_default =			vop_defaultop,
@@ -2233,6 +2213,7 @@ struct vop_ops puffs_vnode_vops = {
 	.vop_read =			puffs_vnop_read,
 	.vop_write =			puffs_vnop_write,
 	.vop_readlink =			puffs_vnop_readlink,
+	.vop_advlock =			puffs_vnop_advlock,
 	.vop_inactive =			puffs_vnop_inactive,
 	.vop_reclaim =			puffs_vnop_reclaim,
 	.vop_pathconf =			puffs_vnop_pathconf,
