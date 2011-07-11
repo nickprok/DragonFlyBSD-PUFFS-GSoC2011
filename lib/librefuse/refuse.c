@@ -39,7 +39,6 @@ __RCSID("$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $");
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
-#include <fuse.h>
 #include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,6 +47,8 @@ __RCSID("$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $");
 #ifdef MULTITHREADED_REFUSE
 #include <pthread.h>
 #endif
+
+#include "fuse.h"
 
 typedef uint64_t	 fuse_ino_t;
 
@@ -616,7 +617,7 @@ puffs_fuse_node_lookup(struct puffs_usermount *pu, void *opc,
 
 	/* XXX: fiXXXme unconst */
 	pn_res = puffs_pn_nodewalk(pu, puffs_path_walkcmp,
-	    __UNCONST(&pcn->pcn_po_full));
+	    __DECONST(struct puffs_pathobj *, &pcn->pcn_po_full));
 	if (pn_res == NULL) {
 		pn_res = newrn(pu);
 		if (pn_res == NULL)
@@ -627,7 +628,6 @@ puffs_fuse_node_lookup(struct puffs_usermount *pu, void *opc,
 	puffs_newinfo_setcookie(pni, pn_res);
 	puffs_newinfo_setvtype(pni, pn_res->pn_va.va_type);
 	puffs_newinfo_setsize(pni, (voff_t)pn_res->pn_va.va_size);
-	puffs_newinfo_setrdev(pni, pn_res->pn_va.va_rdev);
 
 	return 0;
 }
@@ -702,7 +702,7 @@ puffs_fuse_node_mknod(struct puffs_usermount *pu, void *opc,
 
 	/* wrap up return code */
 	mode = puffs_addvtype2mode(va->va_mode, va->va_type);
-	ret = (*fuse->op.mknod)(path, mode, va->va_rdev);
+	ret = (*fuse->op.mknod)(path, mode, 0);
 
 	if (ret == 0) {
 		ret = fuse_newnode(pu, path, va, NULL, pni, NULL);
@@ -986,8 +986,7 @@ puffs_fuse_node_open(struct puffs_usermount *pu, void *opc, int mode,
 
 /* ARGSUSED2 */
 static int
-puffs_fuse_node_close(struct puffs_usermount *pu, void *opc, int fflag,
-	const struct puffs_cred *pcr)
+puffs_fuse_node_close(struct puffs_usermount *pu, void *opc, int fflag)
 {
 	struct puffs_node	*pn = opc;
 	struct refusenode	*rn = pn->pn_data;
@@ -1000,7 +999,9 @@ puffs_fuse_node_close(struct puffs_usermount *pu, void *opc, int fflag,
 	fi = &rn->file_info;
 	ret = 0;
 
+#ifdef XXXDF
 	set_fuse_context_uid_gid(pcr);
+#endif
 
 	if (rn->flags & RN_OPEN) {
 		if (pn->pn_va.va_type == VDIR) {
@@ -1144,12 +1145,12 @@ puffs_fuse_node_readdir(struct puffs_usermount *pu, void *opc,
 		/*LINTED*/
 		fromdent = (struct dirent *)((uint8_t *)dirh->dbuf + *readoff);
 
-		if (*reslen < _DIRENT_SIZE(fromdent))
+		if (*reslen < _DIRENT_DIRSIZ(fromdent))
 			break;
 
-		memcpy(dent, fromdent, _DIRENT_SIZE(fromdent));
-		*readoff += _DIRENT_SIZE(fromdent);
-		*reslen -= _DIRENT_SIZE(fromdent);
+		memcpy(dent, fromdent, _DIRENT_DIRSIZ(fromdent));
+		*readoff += _DIRENT_DIRSIZ(fromdent);
+		*reslen -= _DIRENT_DIRSIZ(fromdent);
 
 		dent = _DIRENT_NEXT(dent);
 	}
@@ -1183,10 +1184,11 @@ puffs_fuse_fs_unmount(struct puffs_usermount *pu, int flags)
 
 /* ARGSUSED0 */
 static int
-puffs_fuse_fs_sync(struct puffs_usermount *pu, int flags,
-            const struct puffs_cred *cr)
+puffs_fuse_fs_sync(struct puffs_usermount *pu, int flags)
 {
+#ifdef XXXDF
 	set_fuse_context_uid_gid(cr);
+#endif
         return 0;
 }
 
