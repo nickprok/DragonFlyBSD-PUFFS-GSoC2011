@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vfsops.c,v 1.95 2010/07/21 17:52:10 hannken Exp $	*/
+/*	$NetBSD: puffs_vfsops.c,v 1.96 2011/06/12 03:35:54 rmind Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.

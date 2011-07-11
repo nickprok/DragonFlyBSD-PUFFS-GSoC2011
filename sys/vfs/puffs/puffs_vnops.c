@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vnops.c,v 1.151 2011/05/03 13:16:47 manu Exp $	*/
+/*	$NetBSD: puffs_vnops.c,v 1.154 2011/07/04 08:07:30 manu Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -783,13 +783,12 @@ puffs_vnop_reclaim(struct vop_reclaim_args *ap)
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	LIST_REMOVE(pnode, pn_hashent);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
-	if (PUFFS_USE_NAMECACHE(pmp))
-		cache_purge(vp);
 
 	if (notifyserver)
 		callreclaim(MPTOPUFFSMP(vp->v_mount), VPTOPNC(vp));
 
 	puffs_putvnode(vp);
+	vp->v_data = NULL;
 
 	return 0;
 }

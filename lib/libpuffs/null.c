@@ -1,4 +1,4 @@
-/*	$NetBSD: null.c,v 1.28 2009/10/18 20:14:06 pooka Exp $	*/
+/*	$NetBSD: null.c,v 1.30 2011/06/27 12:06:19 manu Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: null.c,v 1.28 2009/10/18 20:14:06 pooka Exp $");
+__RCSID("$NetBSD: null.c,v 1.30 2011/06/27 12:06:19 manu Exp $");
 #endif /* !lint */
 
 /*
@@ -394,11 +394,23 @@ puffs_null_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
 {
 	struct puffs_node *pn = opc;
 	int fd, rv;
+	struct stat sb;
 
 	rv = 0;
-	fd = writeableopen(PNPATH(pn));
-	if (fd == -1)
+	if (stat(PNPATH(pn), &sb) == -1)
 		return errno;
+	if (S_ISDIR(sb.st_mode)) {
+		DIR *dirp;
+		if ((dirp = opendir(PNPATH(pn))) == 0)
+			return errno;
+		fd = dirfd(dirp);
+		if (fd == -1)
+			return errno;
+	} else {
+		fd = writeableopen(PNPATH(pn));
+		if (fd == -1)
+			return errno;
+	}
 
 	if (fsync(fd) == -1)
 		rv = errno;
@@ -540,8 +552,13 @@ puffs_null_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	 */
 	while (i--) {
 		rv = readdir_r(dp, &entry, &result);
-		if (rv || !result)
+		if (rv != 0)
 			goto out;
+
+		if (!result) {
+			*eofflag = 1;
+			goto out;
+		}
 	}
 
 	for (;;) {

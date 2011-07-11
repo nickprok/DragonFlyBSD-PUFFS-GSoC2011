@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_node.c,v 1.17 2010/07/25 10:03:59 hannken Exp $	*/
+/*	$NetBSD: puffs_node.c,v 1.19 2011/06/30 20:09:41 wiz Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -45,7 +45,7 @@ static struct puffs_node *puffs_cookie2pnode(struct puffs_mount *,
 					     puffs_cookie_t);
 
 /*
- * Grab a vnode, intialize all the puffs-dependant stuff.
+ * Grab a vnode, intialize all the puffs-dependent stuff.
  */
 int
 puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
@@ -79,8 +79,9 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 
 	/* XXX Add VT_PUFFS */
 	error = getnewvnode(VT_SYNTH, mp, &vp, 0, 0);
-	if (error)
+	if (error) {
 		goto bad;
+	}
 	vp->v_type = type;
 
 	/*
