@@ -157,7 +157,9 @@ static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
+#ifdef XXXDF
 static int  flushvncache(struct vnode *, off_t, off_t, boolean_t);
+#endif
 
 
 #define PUFFS_ABORT_LOOKUP	1
@@ -1733,7 +1735,6 @@ puffs_vnop_pathconf(struct vop_pathconf_args *ap)
 	return error;
 }
 
-#ifdef XXXDF
 static int
 puffs_vnop_advlock(struct vop_advlock_args *ap)
 {
@@ -1761,32 +1762,7 @@ puffs_vnop_advlock(struct vop_advlock_args *ap)
 	return error;
 }
 
-int
-puffs_vnop_abortop(void *v)
-{
-	struct vop_abortop_args /* {
-		struct vnode *a_dvp;
-		struct componentname *a_cnp;
-	}; */ *ap = v;
-	PUFFS_MSG_VARS(vn, abortop);
-	struct vnode *dvp = ap->a_dvp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(dvp->v_mount);
-	struct componentname *cnp = ap->a_cnp;
-
-	if (EXISTSOP(pmp, ABORTOP)) {
-		PUFFS_MSG_ALLOC(vn, abortop);
-		puffs_makecn(&abortop_msg->pvnr_cn, &abortop_msg->pvnr_cn_cred,
-		    cnp, PUFFS_USE_FULLPNBUF(pmp));
-		puffs_msg_setfaf(park_abortop);
-		puffs_msg_setinfo(park_abortop, PUFFSOP_VN,
-		    PUFFS_VN_ABORTOP, VPTOPNC(dvp));
-
-		puffs_msg_enqueue(pmp, park_abortop);
-		PUFFS_MSG_RELEASE(abortop);
-	}
-
-	return genfs_abortop(v);
-}
+#ifdef XXXDF
 
 #define BIOASYNC(bp) (bp->b_flags & B_ASYNC)
 
@@ -2203,241 +2179,6 @@ puffs_vnop_getpages(void *v)
 #endif
 	}
 
-	return error;
-}
-
-/*
- * Extended attribute support.
- */
-
-int
-puffs_vnop_getextattr(void *v)
-{
-	struct vop_getextattr_args /* 
-		struct vnode *a_vp;
-		int a_attrnamespace;
-		const char *a_name;
-		struct uio *a_uio;
-		size_t *a_size;
-		kauth_cred_t a_cred;
-	}; */ *ap = v;
-	PUFFS_MSG_VARS(vn, getextattr);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int attrnamespace = ap->a_attrnamespace;
-	const char *name = ap->a_name;
-	struct uio *uio = ap->a_uio;
-	size_t *sizep = ap->a_size;
-	size_t tomove, resid;
-	int error;
-
-	if (uio)
-		resid = uio->uio_resid;
-	else
-		resid = 0;
-
-	tomove = PUFFS_TOMOVE(resid, pmp);
-	if (tomove != resid) {
-		error = E2BIG;
-		goto out;
-	}
-
-	puffs_msgmem_alloc(sizeof(struct puffs_vnmsg_getextattr) + tomove,
-	    &park_getextattr, (void *)&getextattr_msg, 1);
-
-	getextattr_msg->pvnr_attrnamespace = attrnamespace;
-	strlcpy(getextattr_msg->pvnr_attrname, name,
-	    sizeof(getextattr_msg->pvnr_attrname));
-	puffs_credcvt(&getextattr_msg->pvnr_cred, ap->a_cred);
-	if (sizep)
-		getextattr_msg->pvnr_datasize = 1;
-	getextattr_msg->pvnr_resid = tomove;
-
-	puffs_msg_setinfo(park_getextattr,
-	    PUFFSOP_VN, PUFFS_VN_GETEXTATTR, VPTOPNC(vp));
-	puffs_msg_setdelta(park_getextattr, tomove);
-	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_getextattr, vp->v_data, NULL, error);
-
-	error = checkerr(pmp, error, __func__);
-	if (error)
-		goto out;
-
-	resid = getextattr_msg->pvnr_resid;
-	if (resid > tomove) {
-		puffs_senderr(pmp, PUFFS_ERR_GETEXTATTR, E2BIG,
-		    "resid grew", VPTOPNC(vp));
-		error = EPROTO;
-		goto out;
-	}
-
-	if (sizep)
-		*sizep = getextattr_msg->pvnr_datasize;
-	if (uio)
-		error = uiomove(getextattr_msg->pvnr_data, tomove - resid, uio);
-
- out:
-	PUFFS_MSG_RELEASE(getextattr);
-	return error;
-}
-
-int
-puffs_vnop_setextattr(void *v)
-{
-	struct vop_setextattr_args /* {
-		struct vnode *a_vp;
-		int a_attrnamespace;
-		const char *a_name;
-		struct uio *a_uio;
-		kauth_cred_t a_cred;
-	}; */ *ap = v;
-	PUFFS_MSG_VARS(vn, setextattr);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int attrnamespace = ap->a_attrnamespace;
-	const char *name = ap->a_name;
-	struct uio *uio = ap->a_uio;
-	size_t tomove, resid;
-	int error;
-
-	if (uio)
-		resid = uio->uio_resid;
-	else
-		resid = 0;
-
-	tomove = PUFFS_TOMOVE(resid, pmp);
-	if (tomove != resid) {
-		error = E2BIG;
-		goto out;
-	}
-
-	puffs_msgmem_alloc(sizeof(struct puffs_vnmsg_setextattr) + tomove,
-	    &park_setextattr, (void *)&setextattr_msg, 1);
-
-	setextattr_msg->pvnr_attrnamespace = attrnamespace;
-	strlcpy(setextattr_msg->pvnr_attrname, name,
-	    sizeof(setextattr_msg->pvnr_attrname));
-	puffs_credcvt(&setextattr_msg->pvnr_cred, ap->a_cred);
-	setextattr_msg->pvnr_resid = tomove;
-
-	if (uio) {
-		error = uiomove(setextattr_msg->pvnr_data, tomove, uio);
-		if (error)
-			goto out;
-	}
-
-	puffs_msg_setinfo(park_setextattr,
-	    PUFFSOP_VN, PUFFS_VN_SETEXTATTR, VPTOPNC(vp));
-	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_setextattr, vp->v_data, NULL, error);
-
-	error = checkerr(pmp, error, __func__);
-	if (error)
-		goto out;
-
-	if (setextattr_msg->pvnr_resid != 0)
-		error = EIO;
-
- out:
-	PUFFS_MSG_RELEASE(setextattr);
-
-	return error;
-}
-
-int
-puffs_vnop_listextattr(void *v)
-{
-	struct vop_listextattr_args /* {
-		struct vnode *a_vp;
-		int a_attrnamespace;
-		struct uio *a_uio;
-		size_t *a_size;
-		kauth_cred_t a_cred;
-	}; */ *ap = v;
-	PUFFS_MSG_VARS(vn, listextattr);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int attrnamespace = ap->a_attrnamespace;
-	struct uio *uio = ap->a_uio;
-	size_t *sizep = ap->a_size;
-	size_t tomove, resid;
-	int error;
-
-	if (uio)
-		resid = uio->uio_resid;
-	else
-		resid = 0;
-
-	tomove = PUFFS_TOMOVE(resid, pmp);
-	if (tomove != resid) {
-		error = E2BIG;
-		goto out;
-	}
-
-	puffs_msgmem_alloc(sizeof(struct puffs_vnmsg_listextattr) + tomove,
-	    &park_listextattr, (void *)&listextattr_msg, 1);
-
-	listextattr_msg->pvnr_attrnamespace = attrnamespace;
-	puffs_credcvt(&listextattr_msg->pvnr_cred, ap->a_cred);
-	listextattr_msg->pvnr_resid = tomove;
-	if (sizep)
-		listextattr_msg->pvnr_datasize = 1;
-
-	puffs_msg_setinfo(park_listextattr,
-	    PUFFSOP_VN, PUFFS_VN_LISTEXTATTR, VPTOPNC(vp));
-	puffs_msg_setdelta(park_listextattr, tomove);
-	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_listextattr, vp->v_data, NULL, error);
-
-	error = checkerr(pmp, error, __func__);
-	if (error)
-		goto out;
-
-	resid = listextattr_msg->pvnr_resid;
-	if (resid > tomove) {
-		puffs_senderr(pmp, PUFFS_ERR_LISTEXTATTR, E2BIG,
-		    "resid grew", VPTOPNC(vp));
-		error = EPROTO;
-		goto out;
-	}
-
-	if (sizep)
-		*sizep = listextattr_msg->pvnr_datasize;
-	if (uio)
-		error = uiomove(listextattr_msg->pvnr_data, tomove-resid, uio);
-
- out:
-	PUFFS_MSG_RELEASE(listextattr);
-	return error;
-}
-
-int
-puffs_vnop_deleteextattr(void *v)
-{
-	struct vop_deleteextattr_args /* {
-		struct vnode *a_vp;
-		int a_attrnamespace;
-		const char *a_name;
-		kauth_cred_t a_cred;
-	}; */ *ap = v;
-	PUFFS_MSG_VARS(vn, deleteextattr);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int attrnamespace = ap->a_attrnamespace;
-	const char *name = ap->a_name;
-	int error;
-
-	PUFFS_MSG_ALLOC(vn, deleteextattr);
-	deleteextattr_msg->pvnr_attrnamespace = attrnamespace;
-	strlcpy(deleteextattr_msg->pvnr_attrname, name,
-	    sizeof(deleteextattr_msg->pvnr_attrname));
-	puffs_credcvt(&deleteextattr_msg->pvnr_cred, ap->a_cred);
-
-	puffs_msg_setinfo(park_deleteextattr,
-	    PUFFSOP_VN, PUFFS_VN_DELETEEXTATTR, VPTOPNC(vp));
-	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_deleteextattr,
-	    vp->v_data, NULL, error);
-
-	error = checkerr(pmp, error, __func__);
-
-	PUFFS_MSG_RELEASE(deleteextattr);
 	return error;
 }
 
