@@ -67,7 +67,7 @@ extern int puffsdebug; /* puffs_subr.c */
 #define PMPTOMP(pmp) (pmp->pmp_mp)
 #define VPTOPP(vp) ((struct puffs_node *)(vp)->v_data)
 #define VPTOPNC(vp) (((struct puffs_node *)(vp)->v_data)->pn_cookie)
-#define VPTOPUFFSMP(vp) ((struct puffs_mount*)((struct puffs_node*)vp->v_data))
+#define VPTOPUFFSMP(vp) MPTOPUFFSMP((vp)->v_mount)
 
 /* we don't pass the kernel overlay to userspace */
 #define PUFFS_TOFHSIZE(s) ((s)==0 ? (s) : (s)+4)
