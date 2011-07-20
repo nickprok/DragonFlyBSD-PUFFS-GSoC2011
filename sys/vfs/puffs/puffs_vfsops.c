@@ -41,6 +41,7 @@
 #include <sys/module.h>
 #include <sys/kthread.h>
 #include <sys/libkern.h>
+#include <sys/sysctl.h>
 
 #include <vfs/nfs/nfsproto.h>
 
@@ -63,6 +64,12 @@ int puffs_maxpnodebuckets = PUFFS_MAXPNODEBUCKETS;
 #ifndef __arraycount
 #define __arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
 #endif
+
+SYSCTL_NODE(_vfs, OID_AUTO, puffs, CTLFLAG_RW, 0, "PUFFS filesystem");
+
+static int puffs_use_pagecache = 0;
+SYSCTL_INT(_vfs_puffs, OID_AUTO, pagecache, CTLFLAG_RW, &puffs_use_pagecache,
+        0, "Enable page cache");
 
 static struct putter_ops puffs_putter = {
 	.pop_getout	= puffs_msgif_getout,
@@ -236,6 +243,9 @@ puffs_vfsop_mount(struct mount *mp, char *path, char *data,
 	pmp->pmp_mp = mp;
 	pmp->pmp_msg_maxsize = args->pa_maxmsglen;
 	pmp->pmp_args = *args;
+
+	if (puffs_use_pagecache == 0)
+		pmp->pmp_flags |= PUFFS_KFLAG_NOCACHE_PAGE;
 
 	pmp->pmp_npnodehash = args->pa_nhashbuckets;
 	pmp->pmp_pnodehash = kmalloc(BUCKETALLOC(pmp->pmp_npnodehash),
