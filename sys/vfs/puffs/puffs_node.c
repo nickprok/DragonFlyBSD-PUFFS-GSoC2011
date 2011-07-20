@@ -376,7 +376,7 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 }
 
 void
-puffs_updatenode(struct puffs_node *pn, int flags, voff_t size)
+puffs_updatenode(struct puffs_node *pn, int flags)
 {
 	struct timespec ts;
 
@@ -397,10 +397,36 @@ puffs_updatenode(struct puffs_node *pn, int flags, voff_t size)
 		pn->pn_mc_mtime = ts;
 		pn->pn_stat |= PNODE_METACACHE_MTIME;
 	}
-	if (flags & PUFFS_UPDATESIZE) {
-		pn->pn_mc_size = size;
+}
+
+int
+puffs_meta_setsize(struct vnode *vp, off_t nsize, int trivial)
+{
+	struct puffs_node *pn = VPTOPP(vp);
+	struct puffs_mount *pmp = VPTOPUFFSMP(vp);
+	int biosize = vp->v_mount->mnt_stat.f_iosize;
+	off_t osize;
+	int error;
+
+	osize = puffs_meta_getsize(vp);
+	pn->pn_mc_size = nsize;
+	if (pn->pn_serversize != nsize)
 		pn->pn_stat |= PNODE_METACACHE_SIZE;
+	else
+		pn->pn_stat &= ~PNODE_METACACHE_SIZE;
+
+	if (!PUFFS_USE_PAGECACHE(pmp))
+		return 0;
+
+	if (nsize < osize) {
+		error = nvtruncbuf(vp, nsize, biosize, -1);
+	} else {
+		error = nvextendbuf(vp, osize, nsize,
+				    biosize, biosize, -1, -1,
+				    trivial);
 	}
+
+	return error;
 }
 
 /*

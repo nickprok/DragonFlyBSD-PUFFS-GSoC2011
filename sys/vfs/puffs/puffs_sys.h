@@ -259,11 +259,12 @@ void	puffs_gop_markupdate(struct vnode *, int);
 void	puffs_senderr(struct puffs_mount *, int, int, const char *,
 		      puffs_cookie_t);
 
-void	puffs_updatenode(struct puffs_node *, int, voff_t);
+void	puffs_updatenode(struct puffs_node *, int);
 #define PUFFS_UPDATEATIME	0x01
 #define PUFFS_UPDATECTIME	0x02
 #define PUFFS_UPDATEMTIME	0x04
-#define PUFFS_UPDATESIZE	0x08
+
+int	puffs_meta_setsize(struct vnode *, off_t, int);
 
 void	puffs_userdead(struct puffs_mount *);
 
@@ -279,6 +280,16 @@ void	puffs_msgif_releaseout(void *, void *, int);
 int	puffs_msgif_dispatch(void *, struct putter_hdr *);
 size_t	puffs_msgif_waitcount(void *);
 int	puffs_msgif_close(void *);
+
+static __inline off_t
+puffs_meta_getsize(struct vnode *vp)
+{
+	struct puffs_node *pn = VPTOPP(vp);
+
+	if ((pn->pn_stat & PNODE_METACACHE_SIZE) != 0)
+		return pn->pn_mc_size;
+	return pn->pn_serversize;
+}
 
 static __inline int
 checkerr(struct puffs_mount *pmp, int error, const char *str)

@@ -1273,7 +1273,7 @@ puffs_vnop_link(struct vop_old_link_args *ap)
 	 * don't have a better solution either.  See also puffs_rename().
 	 */
 	if (error == 0)
-		puffs_updatenode(pn, PUFFS_UPDATECTIME, 0);
+		puffs_updatenode(pn, PUFFS_UPDATECTIME);
 
 #ifdef XXXDF
 	RELEPN_AND_VP(dvp, dpn);
@@ -1402,7 +1402,7 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	 * don't have a better solution either.  See also puffs_link().
 	 */
 	if (error == 0)
-		puffs_updatenode(fpn, PUFFS_UPDATECTIME, 0);
+		puffs_updatenode(fpn, PUFFS_UPDATECTIME);
 
  out:
 #ifdef XXXDF
