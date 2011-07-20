@@ -96,7 +96,8 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		break;
 
 	case VREG:
-		vinitvmio(vp, vsize, PAGE_SIZE, -1);
+		if (PUFFS_USE_PAGECACHE(pmp))
+			vinitvmio(vp, vsize, mp->mnt_stat.f_iosize, -1);
 		break;
 
 	case VDIR:

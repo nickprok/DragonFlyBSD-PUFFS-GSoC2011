@@ -173,9 +173,8 @@ puffs_directwrite(struct vnode *vp, struct uio *uio, int ioflag,
 			break;
 		}
 
-		/* adjust file size */
-		if (vp->v_filesize < uio->uio_offset)
-			vnode_pager_setsize(vp, uio->uio_offset);
+		if (PUFFS_USE_PAGECACHE(pmp))
+			KKASSERT(vp->v_filesize >= uio->uio_offset);
 
 		/* didn't move everything?  bad userspace.  bail */
 		if (write_msg->pvnr_resid != 0) {
