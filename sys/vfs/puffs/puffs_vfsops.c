@@ -728,9 +728,6 @@ static int
 puffs_vfsop_init(struct vfsconf *vfc)
 {
 
-	/* some checks depend on this */
-	KKASSERT(VNOVAL == VSIZENOTSET);
-
 	puffs_msgif_init();
 	return 0;
 }

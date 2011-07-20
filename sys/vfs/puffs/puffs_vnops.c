@@ -820,7 +820,7 @@ puffs_vnop_readdir(struct vop_readdir_args *ap)
 	 *
 	 * (yes, I'm very afraid of this)
 	 */
-	KKASSERT(CSIZE <= _DIRENT_MINSIZE((struct dirent *)0));
+	KKASSERT(CSIZE <= _DIRENT_RECLEN(1));
 
 	if (ap->a_cookies) {
 		KKASSERT(ap->a_ncookies != NULL);
