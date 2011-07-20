@@ -280,7 +280,7 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 	 * Check that we don't get our parent node back, that would cause
 	 * a pretty obvious deadlock.
 	 */
-	dpn = dvp->v_data;
+	dpn = VPTOPP(dvp);
 	if (lookup_msg->pvnr_newnode == dpn->pn_cookie) {
 		puffs_senderr(pmp, PUFFS_ERR_LOOKUP, EINVAL,
 		    "lookup produced parent cookie", lookup_msg->pvnr_newnode);
@@ -589,7 +589,7 @@ dosetattr(struct vnode *vp, struct vattr *vap, struct ucred *cred, int flags)
 {
 	PUFFS_MSG_VARS(vn, setattr);
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pn = vp->v_data;
+	struct puffs_node *pn = VPTOPP(vp);
 	int error = 0;
 
 	if ((vp->v_mount->mnt_flag & MNT_RDONLY) &&
@@ -698,9 +698,7 @@ puffs_vnop_inactive(struct vop_inactive_args *ap)
 	PUFFS_MSG_VARS(vn, inactive);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pnode;
-
-	pnode = vp->v_data;
+	struct puffs_node *pnode = VPTOPP(vp);
 
 	if (doinact(pmp, pnode->pn_stat & PNODE_DOINACT)) {
 		/*
@@ -758,7 +756,7 @@ puffs_vnop_reclaim(struct vop_reclaim_args *ap)
 {
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pnode = vp->v_data;
+	struct puffs_node *pnode = VPTOPP(vp);
 	boolean_t notifyserver = TRUE;
 
 	/*
@@ -926,7 +924,7 @@ puffs_vnop_poll(void *v)
 	PUFFS_MSG_VARS(vn, poll);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pn = vp->v_data;
+	struct puffs_node *pn = VPTOPP(vp);
 	int events, error;
 
 	if (EXISTSOP(pmp, POLL)) {
@@ -1370,7 +1368,7 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	PUFFS_MSG_VARS(vn, rename);
 	struct vnode *fdvp = ap->a_fdvp, *fvp = ap->a_fvp;
 	struct vnode *tdvp = ap->a_tdvp, *tvp = ap->a_tvp;
-	struct puffs_node *fpn = ap->a_fvp->v_data;
+	struct puffs_node *fpn = VPTOPP(fvp);
 	struct puffs_mount *pmp = MPTOPUFFSMP(fdvp->v_mount);
 	int error;
 	boolean_t doabort = TRUE;
@@ -1690,7 +1688,7 @@ puffs_vnop_print(struct vop_print_args *ap)
 	PUFFS_MSG_VARS(vn, print);
 	struct vnode *vp = ap->a_vp;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pn = vp->v_data;
+	struct puffs_node *pn = VPTOPP(vp);
 	int error;
 
 	/* kernel portion */

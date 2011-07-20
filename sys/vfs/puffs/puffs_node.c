@@ -299,7 +299,7 @@ puffs_makeroot(struct puffs_mount *pmp)
 	 */
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	if (pmp->pmp_root) {
-		struct puffs_node *pnode = vp->v_data;
+		struct puffs_node *pnode = VPTOPP(vp);
 
 		LIST_REMOVE(pnode, pn_hashent);
 		lockmgr(&pmp->pmp_lock, LK_RELEASE);

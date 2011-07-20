@@ -758,7 +758,7 @@ puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
 		/* doesn't make sense for puffs servers */
 		if (vp->v_mount != mp)
 			return EXDEV;
-		pnp = vp->v_data;
+		pnp = VPTOPP(vp);
 		pnc = pnp->pn_cookie;
 		flags = PUFFS_EXTATTRCTL_HASNODE;
 	} else {
