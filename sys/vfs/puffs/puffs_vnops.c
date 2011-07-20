@@ -569,8 +569,9 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 	} else {
 		if (rvap->va_size != VNOVAL
 		    && vp->v_type != VBLK && vp->v_type != VCHR) {
-			vnode_pager_setsize(vp, rvap->va_size);
 			pn->pn_serversize = rvap->va_size;
+			if (vp->v_type == VREG)
+				puffs_meta_setsize(vp, rvap->va_size, 0);
 		}
 	}
 
@@ -647,7 +648,7 @@ dosetattr(struct vnode *vp, struct vattr *vap, struct ucred *cred, int flags)
 	if (vap->va_size != VNOVAL) {
 		pn->pn_serversize = vap->va_size;
 		if (flags & SETATTR_CHSIZE)
-			vnode_pager_setsize(vp, vap->va_size);
+			puffs_meta_setsize(vp, vap->va_size, 0);
 	}
 
 	return 0;
