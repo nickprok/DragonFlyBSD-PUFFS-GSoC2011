@@ -272,6 +272,7 @@ int	puffs_directread(struct vnode *, struct uio *, int, struct ucred *);
 int	puffs_directwrite(struct vnode *, struct uio *, int, struct ucred *);
 int	puffs_bioread(struct vnode *, struct uio *, int, struct ucred *);
 int	puffs_biowrite(struct vnode *, struct uio *, int, struct ucred *);
+int	puffs_doio(struct vnode *vp, struct bio *bio, struct thread *td);
 
 
 /* for putter */

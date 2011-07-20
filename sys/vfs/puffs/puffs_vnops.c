@@ -157,9 +157,7 @@ static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
-#ifdef XXXDF
-static int  flushvncache(struct vnode *, off_t, off_t, boolean_t);
-#endif
+static int  flushvncache(struct vnode *, boolean_t);
 
 
 #define PUFFS_ABORT_LOOKUP	1
@@ -707,9 +705,7 @@ puffs_vnop_inactive(struct vop_inactive_args *ap)
 		 * deadlock.
 		 */
 
-#ifdef XXXDF
-		flushvncache(vp, 0, 0, FALSE);
-#endif
+		flushvncache(vp, FALSE);
 		PUFFS_MSG_ALLOC(vn, inactive);
 		puffs_msg_setfaf(park_inactive);
 		puffs_msg_setinfo(park_inactive, PUFFSOP_VN,
@@ -957,11 +953,13 @@ puffs_vnop_poll(void *v)
 		return genfs_poll(v);
 	}
 }
+#endif
 
 static int
-flushvncache(struct vnode *vp, off_t offlo, off_t offhi, boolean_t wait)
+flushvncache(struct vnode *vp, boolean_t wait)
 {
 	struct puffs_node *pn = VPTOPP(vp);
+	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct vattr va;
 	int pflags, error;
 
@@ -978,13 +976,11 @@ flushvncache(struct vnode *vp, off_t offlo, off_t offhi, boolean_t wait)
 	/*
 	 * flush pages to avoid being overly dirty
 	 */
-	pflags = PGO_CLEANIT;
-	if (wait)
-		pflags |= PGO_SYNCIO;
-	lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-	return VOP_PUTPAGES(vp, trunc_page(offlo), round_page(offhi), pflags);
+	if (PUFFS_USE_PAGECACHE(pmp))
+		vinvalbuf(vp, V_SAVE, 0, 0);
 }
 
+#ifdef XXXDF
 static int
 puffs_vnop_fsync(void *v)
 {
@@ -1550,426 +1546,30 @@ puffs_vnop_advlock(struct vop_advlock_args *ap)
 	return error;
 }
 
-#ifdef XXXDF
-
-#define BIOASYNC(bp) (bp->b_flags & B_ASYNC)
-
-/*
- * This maps itself to PUFFS_VN_READ/WRITE for data transfer.
- */
 static int
-puffs_vnop_strategy(void *v)
+puffs_vnop_bmap(struct vop_bmap_args *ap)
 {
-	struct vop_strategy_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		struct buf *a_bp;
-	} */ *ap = v;
-	PUFFS_MSG_VARS(vn, rw);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pn;
-	struct buf *bp;
-	size_t argsize;
-	size_t tomove, moved;
-	int error, dofaf, dobiodone;
-
-	pmp = MPTOPUFFSMP(vp->v_mount);
-	bp = ap->a_bp;
-	error = 0;
-	dofaf = 0;
-	pn = VPTOPP(vp);
-	park_rw = NULL; /* explicit */
-	dobiodone = 1;
-
-	if ((BUF_ISREAD(bp) && !EXISTSOP(pmp, READ))
-	    || (BUF_ISWRITE(bp) && !EXISTSOP(pmp, WRITE)))
-		ERROUT(EOPNOTSUPP);
-
-	/*
-	 * Short-circuit optimization: don't flush buffer in between
-	 * VOP_INACTIVE and VOP_RECLAIM in case the node has no references.
-	 */
-	if (pn->pn_stat & PNODE_DYING) {
-		KKASSERT(BUF_ISWRITE(bp));
-		bp->b_resid = 0;
-		goto out;
-	}
-
-#ifdef DIAGNOSTIC
-	if (bp->b_bcount > pmp->pmp_msg_maxsize - PUFFS_MSGSTRUCT_MAX)
-		panic("puffs_strategy: wildly inappropriate buf bcount %d",
-		    bp->b_bcount);
-#endif
-
-	/*
-	 * See explanation for the necessity of a FAF in puffs_fsync.
-	 *
-	 * Also, do FAF in case we're suspending.
-	 * See puffs_vfsops.c:pageflush()
-	 */
-	if (BUF_ISWRITE(bp)) {
-		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-		if (vp->v_iflag & VI_XLOCK)
-			dofaf = 1;
-		if (pn->pn_stat & PNODE_FAF)
-			dofaf = 1;
-		lockmgr(&vp->v_interlock, LK_RELEASE);
-	}
-
-#ifdef DIAGNOSTIC
-		if (curlwp == uvm.pagedaemon_lwp)
-			KKASSERT(dofaf || BIOASYNC(bp));
-#endif
-
-	/* allocate transport structure */
-	tomove = PUFFS_TOMOVE(bp->b_bcount, pmp);
-	argsize = sizeof(struct puffs_vnmsg_rw);
-	error = puffs_msgmem_alloc(argsize + tomove, &park_rw,
-	    (void *)&rw_msg, dofaf ? 0 : 1);
-	if (error)
-		goto out;
-	RWARGS(rw_msg, 0, tomove, bp->b_blkno << DEV_BSHIFT, FSCRED);
-
-	/* 2x2 cases: read/write, faf/nofaf */
-	if (BUF_ISREAD(bp)) {
-		puffs_msg_setinfo(park_rw, PUFFSOP_VN,
-		    PUFFS_VN_READ, VPTOPNC(vp));
-		puffs_msg_setdelta(park_rw, tomove);
-		if (BIOASYNC(bp)) {
-			puffs_msg_setcall(park_rw,
-			    puffs_parkdone_asyncbioread, bp);
-			puffs_msg_enqueue(pmp, park_rw);
-			dobiodone = 0;
-		} else {
-			PUFFS_MSG_ENQUEUEWAIT2(pmp, park_rw, vp->v_data,
-			    NULL, error);
-			error = checkerr(pmp, error, __func__);
-			if (error)
-				goto out;
-
-			if (rw_msg->pvnr_resid > tomove) {
-				puffs_senderr(pmp, PUFFS_ERR_READ,
-				    E2BIG, "resid grew", VPTOPNC(vp));
-				ERROUT(EPROTO);
-			}
-
-			moved = tomove - rw_msg->pvnr_resid;
-
-			(void)memcpy(bp->b_data, rw_msg->pvnr_data, moved);
-			bp->b_resid = bp->b_bcount - moved;
-		}
-	} else {
-		puffs_msg_setinfo(park_rw, PUFFSOP_VN,
-		    PUFFS_VN_WRITE, VPTOPNC(vp));
-		/*
-		 * make pages read-only before we write them if we want
-		 * write caching info
-		 */
-		if (PUFFS_WCACHEINFO(pmp)) {
-			struct uvm_object *uobj = &vp->v_uobj;
-			int npages = (bp->b_bcount + PAGE_SIZE-1) >> PAGE_SHIFT;
-			struct vm_page *vmp;
-			int i;
-
-			for (i = 0; i < npages; i++) {
-				vmp= uvm_pageratop((vaddr_t)bp->b_data
-				    + (i << PAGE_SHIFT));
-				DPRINTF(("puffs_strategy: write-protecting "
-				    "vp %p page %p, offset %" PRId64"\n",
-				    vp, vmp, vmp->offset));
-				lockmgr(&uobj->vmobjlock, LK_EXCLUSIVE);
-				vmp->flags |= PG_RDONLY;
-				pmap_page_protect(vmp, VM_PROT_READ);
-				lockmgr(&uobj->vmobjlock, LK_RELEASE);
-			}
-		}
-
-		(void)memcpy(&rw_msg->pvnr_data, bp->b_data, tomove);
-		if (dofaf) {
-			puffs_msg_setfaf(park_rw);
-		} else if (BIOASYNC(bp)) {
-			puffs_msg_setcall(park_rw,
-			    puffs_parkdone_asyncbiowrite, bp);
-			dobiodone = 0;
-		}
-
-		PUFFS_MSG_ENQUEUEWAIT2(pmp, park_rw, vp->v_data, NULL, error);
-
-		if (dobiodone == 0)
-			goto out;
-
-		/*
-		 * XXXXXXXX: wrong, but kernel can't survive strategy
-		 * failure currently.  Here, have one more X: X.
-		 */
-		if (error != ENOMEM)
-			error = 0;
-
-		error = checkerr(pmp, error, __func__);
-		if (error)
-			goto out;
-
-		if (rw_msg->pvnr_resid > tomove) {
-			puffs_senderr(pmp, PUFFS_ERR_WRITE,
-			    E2BIG, "resid grew", VPTOPNC(vp));
-			ERROUT(EPROTO);
-		}
-
-		/*
-		 * FAF moved everything.  Frankly, we don't
-		 * really have a choice.
-		 */
-		if (dofaf && error == 0)
-			moved = tomove;
-		else 
-			moved = tomove - rw_msg->pvnr_resid;
-
-		bp->b_resid = bp->b_bcount - moved;
-		if (bp->b_resid != 0) {
-			ERROUT(EIO);
-		}
-	}
-
- out:
-	if (park_rw)
-		puffs_msgmem_release(park_rw);
-
-	if (error)
-		bp->b_error = error;
-
-	if (error || dobiodone)
-		biodone(bp);
-
-	return error;
+	if (ap->a_doffsetp != NULL)
+		*ap->a_doffsetp = ap->a_loffset;
+	if (ap->a_runp != NULL)
+		*ap->a_runp = 0;
+	if (ap->a_runb != NULL)
+		*ap->a_runb = 0;
+	return (0);
 }
 
-int
-puffs_vnop_mmap(void *v)
+static int
+puffs_vnop_mmap(struct vop_mmap_args *ap)
 {
-	struct vop_mmap_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		vm_prot_t a_prot;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	PUFFS_MSG_VARS(vn, mmap);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int error;
-
-	if (!PUFFS_USE_PAGECACHE(pmp))
-		return genfs_eopnotsupp(v);
-
-	if (EXISTSOP(pmp, MMAP)) {
-		PUFFS_MSG_ALLOC(vn, mmap);
-		mmap_msg->pvnr_prot = ap->a_prot;
-		puffs_credcvt(&mmap_msg->pvnr_cred, ap->a_cred);
-		puffs_msg_setinfo(park_mmap, PUFFSOP_VN,
-		    PUFFS_VN_MMAP, VPTOPNC(vp));
-
-		PUFFS_MSG_ENQUEUEWAIT2(pmp, park_mmap, vp->v_data, NULL, error);
-		error = checkerr(pmp, error, __func__);
-		PUFFS_MSG_RELEASE(mmap);
-	} else {
-		error = genfs_mmap(v);
-	}
-
-	return error;
+	return EINVAL;
 }
 
 
-/*
- * The rest don't get a free trip to userspace and back, they
- * have to stay within the kernel.
- */
-
-/*
- * bmap doesn't really make any sense for puffs, so just 1:1 map it.
- * well, maybe somehow, somewhere, some day ....
- */
-int
-puffs_vnop_bmap(void *v)
+static int
+puffs_vnop_strategy(struct vop_strategy_args *ap)
 {
-	struct vop_bmap_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		daddr_t a_bn;
-		struct vnode **a_vpp;
-		daddr_t *a_bnp;
-		int *a_runp;
-	} */ *ap = v;
-	struct puffs_mount *pmp;
-
-	pmp = MPTOPUFFSMP(ap->a_vp->v_mount);
-
-	if (ap->a_vpp)
-		*ap->a_vpp = ap->a_vp;
-	if (ap->a_bnp)
-		*ap->a_bnp = ap->a_bn;
-	if (ap->a_runp)
-		*ap->a_runp
-		    = (PUFFS_TOMOVE(pmp->pmp_msg_maxsize, pmp)>>DEV_BSHIFT) - 1;
-
-	return 0;
+	return puffs_doio(ap->a_vp, ap->a_bio, curthread);
 }
-
-/*
- * Handle getpages faults in puffs.  We let genfs_getpages() do most
- * of the dirty work, but we come in this route to do accounting tasks.
- * If the user server has specified functions for cache notifications
- * about reads and/or writes, we record which type of operation we got,
- * for which page range, and proceed to issue a FAF notification to the
- * server about it.
- */
-int
-puffs_vnop_getpages(void *v)
-{
-	struct vop_getpages_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		voff_t a_offset;
-		struct vm_page **a_m;
-		int *a_count;
-		int a_centeridx;
-		vm_prot_t a_access_type;
-		int a_advice;
-		int a_flags;
-	} */ *ap = v;
-	struct puffs_mount *pmp;
-	struct puffs_node *pn;
-	struct vnode *vp;
-	struct vm_page **pgs;
-	struct puffs_cacheinfo *pcinfo = NULL;
-	struct puffs_cacherun *pcrun;
-	void *parkmem = NULL;
-	size_t runsizes;
-	int i, npages, si, streakon;
-	int error, locked, write;
-
-	pmp = MPTOPUFFSMP(ap->a_vp->v_mount);
-	npages = *ap->a_count;
-	pgs = ap->a_m;
-	vp = ap->a_vp;
-	pn = vp->v_data;
-	locked = (ap->a_flags & PGO_LOCKED) != 0;
-	write = (ap->a_access_type & VM_PROT_WRITE) != 0;
-
-	/* ccg xnaht - gets Wuninitialized wrong */
-	pcrun = NULL;
-	runsizes = 0;
-
-	/*
-	 * Check that we aren't trying to fault in pages which our file
-	 * server doesn't know about.  This happens if we extend a file by
-	 * skipping some pages and later try to fault in pages which
-	 * are between pn_serversize and vp_size.  This check optimizes
-	 * away the common case where a file is being extended.
-	 */
-	if (ap->a_offset >= pn->pn_serversize && ap->a_offset < vp->v_size) {
-		struct vattr va;
-
-		/* try again later when we can block */
-		if (locked)
-			ERROUT(EBUSY);
-
-		lockmgr(&vp->v_interlock, LK_RELEASE);
-		vattr_null(&va);
-		va.va_size = vp->v_size;
-		error = dosetattr(vp, &va, FSCRED, 0);
-		if (error)
-			ERROUT(error);
-		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-	}
-
-	if (write && PUFFS_WCACHEINFO(pmp)) {
-#ifdef notnowjohn
-		/* allocate worst-case memory */
-		runsizes = ((npages / 2) + 1) * sizeof(struct puffs_cacherun);
-		pcinfo = kmalloc(sizeof(struct puffs_cacheinfo) + runsize,
-		    M_PUFFS, M_ZERO | (locked ? KM_NOSLEEP : KM_SLEEP));
-
-		/*
-		 * can't block if we're locked and can't mess up caching
-		 * information for fs server.  so come back later, please
-		 */
-		if (pcinfo == NULL)
-			ERROUT(ENOMEM);
-
-		parkmem = puffs_park_alloc(locked == 0);
-		if (parkmem == NULL)
-			ERROUT(ENOMEM);
-
-		pcrun = pcinfo->pcache_runs;
-#else
-		(void)parkmem;
-#endif
-	}
-
-	error = genfs_getpages(v);
-	if (error)
-		goto out;
-
-	if (PUFFS_WCACHEINFO(pmp) == 0)
-		goto out;
-
-	/*
-	 * Let's see whose fault it was and inform the user server of
-	 * possibly read/written pages.  Map pages from read faults
-	 * strictly read-only, since otherwise we might miss info on
-	 * when the page is actually write-faulted to.
-	 */
-	if (!locked)
-		lockmgr(&vp->v_uobj.vmobjlock, LK_EXCLUSIVE);
-	for (i = 0, si = 0, streakon = 0; i < npages; i++) {
-		if (pgs[i] == NULL || pgs[i] == PGO_DONTCARE) {
-			if (streakon && write) {
-				streakon = 0;
-				pcrun[si].pcache_runend
-				    = trunc_page(pgs[i]->offset) + PAGE_MASK;
-				si++;
-			}
-			continue;
-		}
-		if (streakon == 0 && write) {
-			streakon = 1;
-			pcrun[si].pcache_runstart = pgs[i]->offset;
-		}
-			
-		if (!write)
-			pgs[i]->flags |= PG_RDONLY;
-	}
-	/* was the last page part of our streak? */
-	if (streakon) {
-		pcrun[si].pcache_runend
-		    = trunc_page(pgs[i-1]->offset) + PAGE_MASK;
-		si++;
-	}
-	if (!locked)
-		lockmgr(&vp->v_uobj.vmobjlock, LK_RELEASE);
-
-	KKASSERT(si <= (npages / 2) + 1);
-
-#ifdef notnowjohn
-	/* send results to userspace */
-	if (write)
-		puffs_cacheop(pmp, parkmem, pcinfo,
-		    sizeof(struct puffs_cacheinfo) + runsizes, VPTOPNC(vp));
-#endif
-
- out:
-	if (error) {
-		if (pcinfo != NULL)
-			kfree(pcinfo, M_PUFFS);
-#ifdef notnowjohn
-		if (parkmem != NULL)
-			puffs_park_release(parkmem, 1);
-#endif
-	}
-
-	return error;
-}
-#endif
 
 struct vop_ops puffs_fifo_vops = {
 	.vop_default =			fifo_vnoperate,
@@ -2002,6 +1602,11 @@ struct vop_ops puffs_vnode_vops = {
 	.vop_write =			puffs_vnop_write,
 	.vop_readlink =			puffs_vnop_readlink,
 	.vop_advlock =			puffs_vnop_advlock,
+	.vop_bmap =			puffs_vnop_bmap,
+	.vop_mmap =			puffs_vnop_mmap,
+	.vop_strategy =			puffs_vnop_strategy,
+	.vop_getpages =			vop_stdgetpages,
+	.vop_putpages =			vop_stdputpages,
 	.vop_inactive =			puffs_vnop_inactive,
 	.vop_reclaim =			puffs_vnop_reclaim,
 	.vop_pathconf =			puffs_vnop_pathconf,
