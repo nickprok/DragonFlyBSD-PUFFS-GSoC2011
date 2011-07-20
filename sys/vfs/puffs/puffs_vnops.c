@@ -1426,258 +1426,48 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	return error;
 }
 
-#define RWARGS(cont, iofl, move, offset, creds)				\
-	(cont)->pvnr_ioflag = (iofl);					\
-	(cont)->pvnr_resid = (move);					\
-	(cont)->pvnr_offset = (offset);					\
-	puffs_credcvt(&(cont)->pvnr_cred, creds)
-
 static int
 puffs_vnop_read(struct vop_read_args *ap)
 {
-	PUFFS_MSG_VARS(vn, read);
 	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct uio *uio = ap->a_uio;
-	size_t tomove, argsize;
-#ifdef XXXDF
-	vsize_t bytelen;
-#endif
+	int ioflag = ap->a_ioflag;
+	struct ucred * cred = ap->a_cred;
+	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	int error;
 
-	read_msg = NULL;
-	error = 0;
-
-	/* std sanity */
-	if (uio->uio_resid == 0)
-		return 0;
-	if (uio->uio_offset < 0)
+	if (vp->v_type == VDIR)
+		return EISDIR;
+	else if (vp->v_type != VREG)
 		return EINVAL;
 
-#if XXXDF
-	if (vp->v_type == VREG && PUFFS_USE_PAGECACHE(pmp)) {
-		const int advice = IO_ADV_DECODE(ap->a_ioflag);
-
-		while (uio->uio_resid > 0) {
-			bytelen = MIN(uio->uio_resid,
-			    vp->v_size - uio->uio_offset);
-			if (bytelen == 0)
-				break;
-
-			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
-			if (error)
-				break;
-		}
-
-		if ((vp->v_mount->mnt_flag & MNT_NOATIME) == 0)
-			puffs_updatenode(VPTOPP(vp), PUFFS_UPDATEATIME, 0);
-#else
-	if (0) {
-#endif
-	} else {
-		/*
-		 * in case it's not a regular file or we're operating
-		 * uncached, do read in the old-fashioned style,
-		 * i.e. explicit read operations
-		 */
-
-		tomove = PUFFS_TOMOVE(uio->uio_resid, pmp);
-		argsize = sizeof(struct puffs_vnmsg_read);
-		puffs_msgmem_alloc(argsize + tomove, &park_read,
-		    (void *)&read_msg, 1);
-
-		error = 0;
-		while (uio->uio_resid > 0) {
-			tomove = PUFFS_TOMOVE(uio->uio_resid, pmp);
-			memset(read_msg, 0, argsize); /* XXX: touser KASSERT */
-			RWARGS(read_msg, ap->a_ioflag, tomove,
-			    uio->uio_offset, ap->a_cred);
-			puffs_msg_setinfo(park_read, PUFFSOP_VN,
-			    PUFFS_VN_READ, VPTOPNC(vp));
-			puffs_msg_setdelta(park_read, tomove);
-
-			PUFFS_MSG_ENQUEUEWAIT2(pmp, park_read, vp->v_data,
-			    NULL, error);
-			error = checkerr(pmp, error, __func__);
-			if (error)
-				break;
-
-			if (read_msg->pvnr_resid > tomove) {
-				puffs_senderr(pmp, PUFFS_ERR_READ,
-				    E2BIG, "resid grew", VPTOPNC(ap->a_vp));
-				error = EPROTO;
-				break;
-			}
-
-			error = uiomove(read_msg->pvnr_data,
-			    tomove - read_msg->pvnr_resid, uio);
-
-			/*
-			 * in case the file is out of juice, resid from
-			 * userspace is != 0.  and the error-case is
-			 * quite obvious
-			 */
-			if (error || read_msg->pvnr_resid)
-				break;
-		}
-
-		puffs_msgmem_release(park_read);
-	}
+	if (PUFFS_USE_PAGECACHE(pmp))
+		error = puffs_bioread(vp, uio, ioflag, cred);
+	else
+		error = puffs_directread(vp, uio, ioflag, cred);
 
 	return error;
 }
 
-/*
- * XXX: in case of a failure, this leaves uio in a bad state.
- * We could theoretically copy the uio and iovecs and "replay"
- * them the right amount after the userspace trip, but don't
- * bother for now.
- */
 static int
 puffs_vnop_write(struct vop_write_args *ap)
 {
-	PUFFS_MSG_VARS(vn, write);
 	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct uio *uio = ap->a_uio;
-	size_t tomove, argsize;
-#ifdef XXXDF
-	off_t oldoff, newoff, origoff;
-	vsize_t bytelen;
-	int error, uflags;
-	int ubcflags;
-#else
-	int error, uflags;
-#endif
+	int ioflag = ap->a_ioflag;
+	struct ucred * cred = ap->a_cred;
+	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
+	int error;
 
-	error = uflags = 0;
-	write_msg = NULL;
+	if (vp->v_type == VDIR)
+		return EISDIR;
+	else if (vp->v_type != VREG)
+		return EINVAL;
 
-#ifdef XXXDF
-	if (vp->v_type == VREG && PUFFS_USE_PAGECACHE(pmp)) {
-		ubcflags = UBC_WRITE | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp);
-
-		/*
-		 * userspace *should* be allowed to control this,
-		 * but with UBC it's a bit unclear how to handle it
-		 */
-		if (ap->a_ioflag & IO_APPEND)
-			uio->uio_offset = vp->v_size;
-
-		origoff = uio->uio_offset;
-		while (uio->uio_resid > 0) {
-			uflags |= PUFFS_UPDATECTIME;
-			uflags |= PUFFS_UPDATEMTIME;
-			oldoff = uio->uio_offset;
-			bytelen = uio->uio_resid;
-
-			newoff = oldoff + bytelen;
-			if (vp->v_size < newoff) {
-				uvm_vnp_setwritesize(vp, newoff);
-			}
-			error = ubc_uiomove(&vp->v_uobj, uio, bytelen,
-			    UVM_ADV_RANDOM, ubcflags);
-
-			/*
-			 * In case of a ubc_uiomove() error,
-			 * opt to not extend the file at all and
-			 * return an error.  Otherwise, if we attempt
-			 * to clear the memory we couldn't fault to,
-			 * we might generate a kernel page fault.
-			 */
-			if (vp->v_size < newoff) {
-				if (error == 0) {
-					uflags |= PUFFS_UPDATESIZE;
-					uvm_vnp_setsize(vp, newoff);
-				} else {
-					uvm_vnp_setwritesize(vp, vp->v_size);
-				}
-			}
-			if (error)
-				break;
-
-			/*
-			 * If we're writing large files, flush to file server
-			 * every 64k.  Otherwise we can very easily exhaust
-			 * kernel and user memory, as the file server cannot
-			 * really keep up with our writing speed.
-			 *
-			 * Note: this does *NOT* honor MNT_ASYNC, because
-			 * that gives userland too much say in the kernel.
-			 */
-			if (oldoff >> 16 != uio->uio_offset >> 16) {
-				lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-				error = VOP_PUTPAGES(vp, oldoff & ~0xffff,
-				    uio->uio_offset & ~0xffff,
-				    PGO_CLEANIT | PGO_SYNCIO);
-				if (error)
-					break;
-			}
-		}
-
-		/* synchronous I/O? */
-		if (error == 0 && ap->a_ioflag & IO_SYNC) {
-			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-			error = VOP_PUTPAGES(vp, trunc_page(origoff),
-			    round_page(uio->uio_offset),
-			    PGO_CLEANIT | PGO_SYNCIO);
-
-		/* write through page cache? */
-		} else if (error == 0 && pmp->pmp_flags & PUFFS_KFLAG_WTCACHE) {
-			lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-			error = VOP_PUTPAGES(vp, trunc_page(origoff),
-			    round_page(uio->uio_offset), PGO_CLEANIT);
-		}
-
-		puffs_updatenode(VPTOPP(vp), uflags, vp->v_size);
-#else
-	if (0) {
-#endif
-	} else {
-		/* tomove is non-increasing */
-		tomove = PUFFS_TOMOVE(uio->uio_resid, pmp);
-		argsize = sizeof(struct puffs_vnmsg_write) + tomove;
-		puffs_msgmem_alloc(argsize, &park_write, (void *)&write_msg,1);
-
-		while (uio->uio_resid > 0) {
-			/* move data to buffer */
-			tomove = PUFFS_TOMOVE(uio->uio_resid, pmp);
-			memset(write_msg, 0, argsize); /* XXX: touser KASSERT */
-			RWARGS(write_msg, ap->a_ioflag, tomove,
-			    uio->uio_offset, ap->a_cred);
-			error = uiomove(write_msg->pvnr_data, tomove, uio);
-			if (error)
-				break;
-
-			/* move buffer to userspace */
-			puffs_msg_setinfo(park_write, PUFFSOP_VN,
-			    PUFFS_VN_WRITE, VPTOPNC(vp));
-			PUFFS_MSG_ENQUEUEWAIT2(pmp, park_write, vp->v_data,
-			    NULL, error);
-			error = checkerr(pmp, error, __func__);
-			if (error)
-				break;
-
-			if (write_msg->pvnr_resid > tomove) {
-				puffs_senderr(pmp, PUFFS_ERR_WRITE,
-				    E2BIG, "resid grew", VPTOPNC(ap->a_vp));
-				error = EPROTO;
-				break;
-			}
-
-			/* adjust file size */
-			if (vp->v_filesize < uio->uio_offset)
-				vnode_pager_setsize(vp, uio->uio_offset);
-
-			/* didn't move everything?  bad userspace.  bail */
-			if (write_msg->pvnr_resid != 0) {
-				error = EIO;
-				break;
-			}
-		}
-		puffs_msgmem_release(park_write);
-	}
+	if (PUFFS_USE_PAGECACHE(pmp))
+		error = puffs_biowrite(vp, uio, ioflag, cred);
+	else
+		error = puffs_directwrite(vp, uio, ioflag, cred);
 
 	return error;
 }

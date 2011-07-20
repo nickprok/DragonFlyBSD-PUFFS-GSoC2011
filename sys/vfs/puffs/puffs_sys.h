@@ -267,6 +267,12 @@ void	puffs_updatenode(struct puffs_node *, int, voff_t);
 
 void	puffs_userdead(struct puffs_mount *);
 
+int	puffs_directread(struct vnode *, struct uio *, int, struct ucred *);
+int	puffs_directwrite(struct vnode *, struct uio *, int, struct ucred *);
+int	puffs_bioread(struct vnode *, struct uio *, int, struct ucred *);
+int	puffs_biowrite(struct vnode *, struct uio *, int, struct ucred *);
+
+
 /* for putter */
 int	puffs_msgif_getout(void *, size_t, int, uint8_t **, size_t *, void **);
 void	puffs_msgif_releaseout(void *, void *, int);
