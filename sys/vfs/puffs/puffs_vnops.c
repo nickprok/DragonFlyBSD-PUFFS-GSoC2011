@@ -899,62 +899,6 @@ puffs_vnop_readdir(struct vop_readdir_args *ap)
 }
 #undef CSIZE
 
-#ifdef XXXDF
-/*
- * poll works by consuming the bitmask in pn_revents.  If there are
- * events available, poll returns immediately.  If not, it issues a
- * poll to userspace, selrecords itself and returns with no available
- * events.  When the file server returns, it executes puffs_parkdone_poll(),
- * where available events are added to the bitmask.  selnotify() is
- * then also executed by that function causing us to enter here again
- * and hopefully find the missing bits (unless someone got them first,
- * in which case it starts all over again).
- */
-static int
-puffs_vnop_poll(void *v)
-{
-	struct vop_poll_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		int a_events;
-	} */ *ap = v;
-	PUFFS_MSG_VARS(vn, poll);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	struct puffs_node *pn = VPTOPP(vp);
-	int events, error;
-
-	if (EXISTSOP(pmp, POLL)) {
-		lockmgr(&pn->pn_mtx, LK_EXCLUSIVE);
-		events = pn->pn_revents & ap->a_events;
-		if (events & ap->a_events) {
-			pn->pn_revents &= ~ap->a_events;
-			lockmgr(&pn->pn_mtx, LK_RELEASE);
-
-			return events;
-		} else {
-			puffs_referencenode(pn);
-			lockmgr(&pn->pn_mtx, LK_RELEASE);
-
-			PUFFS_MSG_ALLOC(vn, poll);
-			poll_msg->pvnr_events = ap->a_events;
-			puffs_msg_setinfo(park_poll, PUFFSOP_VN,
-			    PUFFS_VN_POLL, VPTOPNC(vp));
-			puffs_msg_setcall(park_poll, puffs_parkdone_poll, pn);
-			selrecord(curlwp, &pn->pn_sel);
-
-			PUFFS_MSG_ENQUEUEWAIT2(pmp, park_poll, vp->v_data,
-			    NULL, error);
-			PUFFS_MSG_RELEASE(poll);
-
-			return 0;
-		}
-	} else {
-		return genfs_poll(v);
-	}
-}
-#endif
-
 static int
 flushvncache(struct vnode *vp, boolean_t wait)
 {
@@ -1044,33 +988,6 @@ puffs_vnop_fsync(void *v)
 	error = checkerr(pmp, error, __func__);
 
 	return error;
-}
-
-int
-puffs_vnop_seek(void *v)
-{
-	struct vop_seek_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		off_t a_oldoff;
-		off_t a_newoff;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	PUFFS_MSG_VARS(vn, seek);
-	struct vnode *vp = ap->a_vp;
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
-	int error;
-
-	PUFFS_MSG_ALLOC(vn, seek);
-	seek_msg->pvnr_oldoff = ap->a_oldoff;
-	seek_msg->pvnr_newoff = ap->a_newoff;
-	puffs_credcvt(&seek_msg->pvnr_cred, ap->a_cred);
-	puffs_msg_setinfo(park_seek, PUFFSOP_VN,
-	    PUFFS_VN_SEEK, VPTOPNC(vp));
-
-	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_seek, vp->v_data, NULL, error);
-	PUFFS_MSG_RELEASE(seek);
-	return checkerr(pmp, error, __func__);
 }
 #endif
 
