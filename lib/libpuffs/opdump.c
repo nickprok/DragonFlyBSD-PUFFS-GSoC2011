@@ -417,25 +417,12 @@ puffsdump_cookie(puffs_cookie_t c, const char *cookiename)
 	mydprintf("%scookie: at %p\n", cookiename, c);
 }
 
-static const char *cn_opnames[] = {
-	"LOOKUP",
-	"CREATE",
-	"DELETE",
-	"RENAME"
-};
-
-#ifndef NAMEI_OPMASK
-#define NAMEI_OPMASK	3
-#endif
-
 void
 puffsdump_cn(struct puffs_kcn *pkcn)
 {
 
-	mydprintf(DINT "puffs_cn: \"%s\", len %zu op %s (flags 0x%x)\n",
-	    pkcn->pkcn_name, pkcn->pkcn_namelen,
-	    cn_opnames[pkcn->pkcn_nameiop & NAMEI_OPMASK],
-	    pkcn->pkcn_flags);
+	mydprintf(DINT "puffs_cn: \"%s\", len %zu\n",
+	    pkcn->pkcn_name, pkcn->pkcn_namelen);
 }
 
 void

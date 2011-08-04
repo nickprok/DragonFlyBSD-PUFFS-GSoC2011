@@ -151,6 +151,7 @@ void
 puffs_newinfo_setcookie(struct puffs_newinfo *pni, puffs_cookie_t cookie)
 {
 
+	assert(pni->pni_cookie != NULL);
 	*pni->pni_cookie = cookie;
 }
 
@@ -158,12 +159,14 @@ void
 puffs_newinfo_setvtype(struct puffs_newinfo *pni, enum vtype vt)
 {
 
-	*pni->pni_vtype = vt;
+	if (pni->pni_vtype != NULL)
+		*pni->pni_vtype = vt;
 }
 
 void
 puffs_newinfo_setsize(struct puffs_newinfo *pni, voff_t size)
 {
 
-	*pni->pni_size = size;
+	if (pni->pni_size != NULL)
+		*pni->pni_size = size;
 }

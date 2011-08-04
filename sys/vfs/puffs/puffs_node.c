@@ -167,7 +167,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 /* new node creating for creative vop ops (create, symlink, mkdir, mknod) */
 int
 puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
-	puffs_cookie_t ck, struct componentname *cnp,
+	puffs_cookie_t ck, struct namecache *ncp,
 	enum vtype type, dev_t rdev)
 {
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);

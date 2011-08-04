@@ -129,11 +129,8 @@ struct puffs_cn {
 
 	struct puffs_pathobj	pcn_po_full;	/* PUFFS_FLAG_BUILDPATH */
 };
-#define pcn_nameiop	pcn_pkcnp->pkcn_nameiop
-#define pcn_flags	pcn_pkcnp->pkcn_flags
 #define pcn_name	pcn_pkcnp->pkcn_name
 #define pcn_namelen	pcn_pkcnp->pkcn_namelen
-#define pcn_consume	pcn_pkcnp->pkcn_consume
 
 /*
  * Puffs options to mount
@@ -171,6 +168,8 @@ struct puffs_ops {
 	    puffs_cookie_t, int, int, const char *);
 
 	int (*puffs_node_lookup)(struct puffs_usermount *,
+	    puffs_cookie_t, struct puffs_newinfo *, const struct puffs_cn *);
+	int (*puffs_node_lookupdotdot)(struct puffs_usermount *,
 	    puffs_cookie_t, struct puffs_newinfo *, const struct puffs_cn *);
 	int (*puffs_node_create)(struct puffs_usermount *,
 	    puffs_cookie_t, struct puffs_newinfo *, const struct puffs_cn *,
@@ -310,6 +309,9 @@ enum {
 	int fsname##_node_lookup(struct puffs_usermount *,		\
 	    puffs_cookie_t, struct puffs_newinfo *,			\
 	    const struct puffs_cn *);					\
+	int fsname##_node_lookupdotdot(struct puffs_usermount *,	\
+	    puffs_cookie_t, struct puffs_newinfo *,			\
+	    const struct puffs_cn *);					\
 	int fsname##_node_create(struct puffs_usermount *,		\
 	    puffs_cookie_t, struct puffs_newinfo *,			\
 	    const struct puffs_cn *, const struct vattr *);		\
@@ -401,8 +403,6 @@ PUFFSOP_PROTOS(puffs_null)	/* XXX */
 #define PNPLEN(pnode)	((pnode)->pn_po.po_len)
 #define PCNPATH(pcnode)	((pcnode)->pcn_po_full.po_path)
 #define PCNPLEN(pcnode)	((pcnode)->pcn_po_full.po_len)
-#define PCNISDOTDOT(pcnode) \
-	((pcnode)->pcn_namelen == 2 && strcmp((pcnode)->pcn_name, "..") == 0)
 
 #define PUFFS_STORE_DCOOKIE(cp, ncp, off)				\
 if (cp)	{								\

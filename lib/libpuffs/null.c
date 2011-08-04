@@ -307,6 +307,13 @@ puffs_null_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	return 0;
 }
 
+int
+puffs_null_node_lookupdotdot(struct puffs_usermount *pu, puffs_cookie_t opc,
+	struct puffs_newinfo *pni, const struct puffs_cn *pcn)
+{
+	return puffs_null_node_lookup(pu, opc, pni, pcn);
+}
+
 /*ARGSUSED*/
 int
 puffs_null_node_create(struct puffs_usermount *pu, puffs_cookie_t opc,

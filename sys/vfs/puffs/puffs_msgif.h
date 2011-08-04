@@ -78,7 +78,8 @@ enum {
 #define PUFFS_VFS_MAX PUFFS_VFS_SUSPEND
 
 enum {
-	PUFFS_VN_LOOKUP,	PUFFS_VN_CREATE,	PUFFS_VN_MKNOD,
+	PUFFS_VN_LOOKUP,	PUFFS_VN_LOOKUPDOTDOT,
+	PUFFS_VN_CREATE,	PUFFS_VN_MKNOD,
 	PUFFS_VN_OPEN,		PUFFS_VN_CLOSE,		PUFFS_VN_ACCESS,
 	PUFFS_VN_GETATTR,	PUFFS_VN_SETATTR,	PUFFS_VN_READ,
 	PUFFS_VN_WRITE,		PUFFS_VN_IOCTL,		PUFFS_VN_FCNTL,
@@ -97,7 +98,7 @@ enum {
 	/* NOTE: If you add an op, decrement PUFFS_VN_SPARE accordingly */
 };
 #define PUFFS_VN_MAX PUFFS_VN_CLOSEEXTATTR
-#define PUFFS_VN_SPARE 32
+#define PUFFS_VN_SPARE 31
 
 /*
  * These signal invalid parameters the file system returned.
@@ -165,7 +166,6 @@ struct puffs_kargs {
 #define PUFFS_KFLAG_ALLOPS		0x04	/* ignore pa_vnopmask       */
 #define PUFFS_KFLAG_WTCACHE		0x08	/* write-through page cache */
 #define PUFFS_KFLAG_IAONDEMAND		0x10	/* inactive only on demand  */
-#define PUFFS_KFLAG_LOOKUP_FULLPNBUF	0x20	/* full pnbuf in lookup     */
 #define PUFFS_KFLAG_MASK		0x3f
 #define PUFFS_KFLAG_NOCACHE_ATTR	0x40	/* no attrib cache (unused) */
 
@@ -266,13 +266,8 @@ struct puffs_kcred {
 
 /* puffs struct componentname built by kernel */
 struct puffs_kcn {
-	/* args */
-	uint32_t		pkcn_nameiop;	/* namei operation	*/
-	uint32_t		pkcn_flags;	/* flags		*/
-
-	char pkcn_name[MAXPATHLEN];	/* nulterminated path component */
+	char pkcn_name[NAME_MAX + 1];	/* nulterminated path component */
 	size_t pkcn_namelen;		/* current component length	*/
-	size_t pkcn_consume;		/* IN: extra chars server ate   */
 };
 
 
@@ -366,6 +361,14 @@ struct puffs_vnmsg_lookup {
 	enum vtype		pvnr_vtype;		/* IN	*/
 	voff_t			pvnr_size;		/* IN	*/
 	dev_t			pvnr_rdev;		/* IN	*/
+};
+
+struct puffs_vnmsg_lookupdotdot {
+	struct puffs_req	pvn_pr;
+
+	struct puffs_kcred	pvnr_cred;		/* OUT	*/
+
+	puffs_cookie_t		pvnr_newnode;		/* IN	*/
 };
 
 struct puffs_vnmsg_create {

@@ -81,8 +81,6 @@ extern int puffsdebug; /* puffs_subr.c */
     (((pmp)->pmp_flags & PUFFS_KFLAG_NOCACHE_NAME) == 0)
 #define PUFFS_USE_PAGECACHE(pmp)	\
     (((pmp)->pmp_flags & PUFFS_KFLAG_NOCACHE_PAGE) == 0)
-#define PUFFS_USE_FULLPNBUF(pmp)	\
-    ((pmp)->pmp_flags & PUFFS_KFLAG_LOOKUP_FULLPNBUF)
 
 #define PUFFS_WCACHEINFO(pmp)	0
 
@@ -230,7 +228,7 @@ void	puffs_msg_sendresp(struct puffs_mount *, struct puffs_req *, int);
 int	puffs_getvnode(struct mount *, puffs_cookie_t, enum vtype,
 		       voff_t, dev_t, struct vnode **);
 int	puffs_newnode(struct mount *, struct vnode *, struct vnode **,
-		      puffs_cookie_t, struct componentname *,
+		      puffs_cookie_t, struct namecache *,
 		      enum vtype, dev_t);
 void	puffs_putvnode(struct vnode *);
 
@@ -241,7 +239,7 @@ void	puffs_referencenode(struct puffs_node *);
 int	puffs_cookie2vnode(struct puffs_mount *, puffs_cookie_t, int,
 			   struct vnode **);
 void	puffs_makecn(struct puffs_kcn *, struct puffs_kcred *,
-		     const struct componentname *, int);
+		     const struct namecache *, struct ucred *);
 void	puffs_credcvt(struct puffs_kcred *, struct ucred *);
 
 void	puffs_parkdone_asyncbioread(struct puffs_mount *,

@@ -52,9 +52,9 @@ do {									\
 } while (/*CONSTCOND*/0)
 
 static int callremove(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
-			    struct componentname *);
+			    struct namecache *, struct ucred *);
 static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
-			   struct componentname *);
+			   struct namecache *, struct ucred *);
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
 static int  flushvncache(struct vnode *, int);
@@ -71,17 +71,18 @@ static int  flushvncache(struct vnode *, int);
  */
 static void
 puffs_abortbutton(struct puffs_mount *pmp, int what,
-	puffs_cookie_t dck, puffs_cookie_t ck, struct componentname *cnp)
+	puffs_cookie_t dck, puffs_cookie_t ck,
+	struct namecache *ncp, struct ucred *cred)
 {
 
 	switch (what) {
 	case PUFFS_ABORT_CREATE:
 	case PUFFS_ABORT_MKNOD:
 	case PUFFS_ABORT_SYMLINK:
-		callremove(pmp, dck, ck, cnp);
+		callremove(pmp, dck, ck, ncp, cred);
 		break;
 	case PUFFS_ABORT_MKDIR:
-		callrmdir(pmp, dck, ck, cnp);
+		callrmdir(pmp, dck, ck, ncp, cred);
 		break;
 	}
 
@@ -102,75 +103,39 @@ puffs_abortbutton(struct puffs_mount *pmp, int what,
  * unlock-do op-lock for others and order the graph in userspace, but I
  * don't want to think of the consequences for the time being.
  */
-
 static int
-puffs_vnop_lookup(struct vop_old_lookup_args *ap)
+puffs_vnop_lookup(struct vop_nresolve_args *ap)
 {
 	PUFFS_MSG_VARS(vn, lookup);
 	struct puffs_mount *pmp = MPTOPUFFSMP(ap->a_dvp->v_mount);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	struct vnode *vp, *dvp = ap->a_dvp;
 	struct puffs_node *dpn;
-	int isdot= cnp->cn_namelen == 1 && *cnp->cn_nameptr == '.';
-	int isdotdot = cnp->cn_flags & CNP_ISDOTDOT;
-	int lockparent = cnp->cn_flags & CNP_LOCKPARENT;
 	int error;
 
-	*ap->a_vpp = NULL;
+	DPRINTF(("puffs_lookup: \"%s\", parent vnode %p\n",
+	    ncp->nc_name, dvp));
 
-	/* r/o fs?  we check create later to handle EEXIST */
-	if ((dvp->v_mount->mnt_flag & MNT_RDONLY)
-	    && (cnp->cn_nameiop == NAMEI_DELETE ||
-	    cnp->cn_nameiop == NAMEI_RENAME))
-		return EROFS;
-
-	DPRINTF(("puffs_lookup: \"%s\", parent vnode %p, op: %x\n",
-	    cnp->cn_nameptr, dvp, (int)cnp->cn_nameiop));
-
-	if (isdot) {
-		/* deal with rename lookup semantics */
-		if (cnp->cn_nameiop == NAMEI_RENAME)
-			return EISDIR;
-
-		vp = ap->a_dvp;
-		vref(vp);
-		*ap->a_vpp = vp;
-		return 0;
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_lookup: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
 	}
 
 	PUFFS_MSG_ALLOC(vn, lookup);
 	puffs_makecn(&lookup_msg->pvnr_cn, &lookup_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
-
-	if (isdotdot)
-		vn_unlock(dvp); /* XXXDF TODO */
+	    ncp, cred);
 
 	puffs_msg_setinfo(park_lookup, PUFFSOP_VN,
 	    PUFFS_VN_LOOKUP, VPTOPNC(dvp));
 	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_lookup, dvp->v_data, NULL, error);
 	DPRINTF(("puffs_lookup: return of the userspace, part %d\n", error));
-
-	/*
-	 * In case of error, there is no new vnode to play with, so be
-	 * happy with the NULL value given to vpp in the beginning.
-	 * Also, check if this really was an error or the target was not
-	 * present.  Either treat it as a non-error for CREATE/RENAME or
-	 * enter the component into the negative name cache (if desired).
-	 */
 	if (error) {
 		error = checkerr(pmp, error, __func__);
-		if (error == ENOENT) {
-			/* don't allow to create files on r/o fs */
-			if ((dvp->v_mount->mnt_flag & MNT_RDONLY)
-			    && cnp->cn_nameiop == NAMEI_CREATE) {
-				error = EROFS;
-
-			/* adjust values if we are creating */
-			} else if ((cnp->cn_nameiop == NAMEI_CREATE
-			      || cnp->cn_nameiop == NAMEI_RENAME)) {
-				error = EJUSTRETURN;
-			}
-		}
+		if (error == ENOENT)
+			cache_setvp(nch, NULL);
 		goto out;
 	}
 
@@ -193,51 +158,122 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 		    lookup_msg->pvnr_size, lookup_msg->pvnr_rdev, &vp);
 		if (error) {
 			puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
-			    lookup_msg->pvnr_newnode, ap->a_cnp);
+			    lookup_msg->pvnr_newnode, ncp, cred);
 			goto out;
 		}
 	} else if (error) {
 		puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
-		    lookup_msg->pvnr_newnode, ap->a_cnp);
+		    lookup_msg->pvnr_newnode, ncp, cred);
 		goto out;
 	}
 
-	*ap->a_vpp = vp;
-
-	if (lookup_msg->pvnr_cn.pkcn_consume)
-		cnp->cn_consume = MIN(lookup_msg->pvnr_cn.pkcn_consume,
-		    strlen(cnp->cn_nameptr) - cnp->cn_namelen);
-
  out:
-	if (isdotdot && lockparent)
-		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
-
-	DPRINTF(("puffs_lookup: returning %d %p\n", error, *ap->a_vpp));
+	vput(dvp);
+	if (!error) {
+		vn_unlock(vp);
+		cache_setvp(nch, vp);
+		vrele(vp);
+	}
+	DPRINTF(("puffs_lookup: returning %d\n", error));
 	PUFFS_MSG_RELEASE(lookup);
 	return error;
 }
 
 static int
-puffs_vnop_create(struct vop_old_create_args *ap)
+puffs_vnop_lookupdotdot(struct vop_nlookupdotdot_args *ap)
+{
+	PUFFS_MSG_VARS(vn, lookupdotdot);
+	struct puffs_mount *pmp = MPTOPUFFSMP(ap->a_dvp->v_mount);
+	struct ucred *cred = ap->a_cred;
+	struct vnode *vp, *dvp = ap->a_dvp;
+	struct puffs_node *dpn;
+	int error;
+
+	*ap->a_vpp = NULL;
+
+	DPRINTF(("puffs_lookupdotdot: vnode %p\n", dvp));
+
+	PUFFS_MSG_ALLOC(vn, lookupdotdot);
+	puffs_credcvt(&lookupdotdot_msg->pvnr_cred, cred);
+
+	puffs_msg_setinfo(park_lookupdotdot, PUFFSOP_VN,
+	    PUFFS_VN_LOOKUPDOTDOT, VPTOPNC(dvp));
+	PUFFS_MSG_ENQUEUEWAIT2(pmp, park_lookupdotdot, dvp->v_data, NULL,
+	    error);
+	DPRINTF(("puffs_lookupdotdot: return of the userspace, part %d\n",
+	    error));
+	if (error) {
+		error = checkerr(pmp, error, __func__);
+		goto out;
+	}
+
+	/*
+	 * Check that we don't get our node back, that would cause
+	 * a pretty obvious deadlock.
+	 */
+	dpn = VPTOPP(dvp);
+	if (lookupdotdot_msg->pvnr_newnode == dpn->pn_cookie) {
+		puffs_senderr(pmp, PUFFS_ERR_LOOKUP, EINVAL,
+		    "lookupdotdot produced the same cookie",
+		    lookupdotdot_msg->pvnr_newnode);
+		error = EPROTO;
+		goto out;
+	}
+
+	error = puffs_cookie2vnode(pmp, lookupdotdot_msg->pvnr_newnode,
+	    1, &vp);
+	if (error == PUFFS_NOSUCHCOOKIE) {
+		error = puffs_getvnode(dvp->v_mount,
+		    lookupdotdot_msg->pvnr_newnode, VDIR, 0, 0, &vp);
+		if (error) {
+			puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
+			    lookupdotdot_msg->pvnr_newnode, NULL, cred);
+			goto out;
+		}
+	} else if (error) {
+		puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
+		    lookupdotdot_msg->pvnr_newnode, NULL, cred);
+		goto out;
+	}
+
+	*ap->a_vpp = vp;
+	vn_unlock(vp);
+
+ out:
+	DPRINTF(("puffs_lookupdotdot: returning %d %p\n", error, *ap->a_vpp));
+	PUFFS_MSG_RELEASE(lookupdotdot);
+	return error;
+}
+
+static int
+puffs_vnop_create(struct vop_ncreate_args *ap)
 {
 	PUFFS_MSG_VARS(vn, create);
 	struct vnode *dvp = ap->a_dvp;
 	struct vattr *vap = ap->a_vap;
 	struct puffs_node *dpn = VPTOPP(dvp);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error;
 
-	DPRINTF(("puffs_create: dvp %p, cnp: %s\n",
-	    dvp, ap->a_cnp->cn_nameptr));
+	DPRINTF(("puffs_create: dvp %p, name: %s\n",
+	    dvp, ncp->nc_name));
 
 	if (vap->va_type != VREG && vap->va_type != VSOCK)
 		return EINVAL;
 
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_create: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
+	}
+
 	PUFFS_MSG_ALLOC(vn, create);
 	puffs_makecn(&create_msg->pvnr_cn, &create_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	create_msg->pvnr_va = *ap->a_vap;
 	puffs_msg_setinfo(park_create, PUFFSOP_VN,
 	    PUFFS_VN_CREATE, VPTOPNC(dvp));
@@ -248,38 +284,51 @@ puffs_vnop_create(struct vop_old_create_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    create_msg->pvnr_newnode, cnp, vap->va_type, 0);
+	    create_msg->pvnr_newnode, ncp, vap->va_type, 0);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_CREATE, dpn->pn_cookie,
-		    create_msg->pvnr_newnode, cnp);
+		    create_msg->pvnr_newnode, ncp, cred);
 
  out:
 	DPRINTF(("puffs_create: return %d\n", error));
+	vput(dvp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, *ap->a_vpp);
+	}
 	PUFFS_MSG_RELEASE(create);
 	return error;
 }
 
 static int
-puffs_vnop_mknod(struct vop_old_mknod_args *ap)
+puffs_vnop_mknod(struct vop_nmknod_args *ap)
 {
 	PUFFS_MSG_VARS(vn, mknod);
 	struct vnode *dvp = ap->a_dvp;
 	struct vattr *vap = ap->a_vap;
 	struct puffs_node *dpn = VPTOPP(dvp);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error;
 
-	DPRINTF(("puffs_mknod: dvp %p, cnp: %s\n",
-	    dvp, ap->a_cnp->cn_nameptr));
+	DPRINTF(("puffs_mknod: dvp %p, name: %s\n",
+	    dvp, ncp->nc_name));
 
 	if (vap->va_type != VFIFO)
 		return EINVAL;
 
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_mknod: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
+	}
+
 	PUFFS_MSG_ALLOC(vn, mknod);
 	puffs_makecn(&mknod_msg->pvnr_cn, &mknod_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	mknod_msg->pvnr_va = *ap->a_vap;
 	puffs_msg_setinfo(park_mknod, PUFFSOP_VN,
 	    PUFFS_VN_MKNOD, VPTOPNC(dvp));
@@ -291,14 +340,18 @@ puffs_vnop_mknod(struct vop_old_mknod_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    mknod_msg->pvnr_newnode, cnp, vap->va_type,
+	    mknod_msg->pvnr_newnode, ncp, vap->va_type,
 	    makeudev(vap->va_rmajor, vap->va_rminor));
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_MKNOD, dpn->pn_cookie,
-		    mknod_msg->pvnr_newnode, cnp);
+		    mknod_msg->pvnr_newnode, ncp, cred);
 
  out:
 	vput(dvp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, *ap->a_vpp);
+	}
 	PUFFS_MSG_RELEASE(mknod);
 	return error;
 }
@@ -837,7 +890,7 @@ puffs_vnop_fsync(struct vop_fsync_args *ap)
 
 static int
 callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
-	struct componentname *cnp)
+	struct namecache *ncp, struct ucred *cred)
 {
 	PUFFS_MSG_VARS(vn, remove);
 	int error;
@@ -845,7 +898,7 @@ callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
 	PUFFS_MSG_ALLOC(vn, remove);
 	remove_msg->pvnr_cookie_targ = ck;
 	puffs_makecn(&remove_msg->pvnr_cn, &remove_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	puffs_msg_setinfo(park_remove, PUFFSOP_VN, PUFFS_VN_REMOVE, dck);
 
 	PUFFS_MSG_ENQUEUEWAIT(pmp, park_remove, error);
@@ -859,22 +912,42 @@ callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
  * it due to lack of a pnode argument.
  */
 static int
-puffs_vnop_remove(struct vop_old_remove_args *ap)
+puffs_vnop_remove(struct vop_nremove_args *ap)
 {
 	PUFFS_MSG_VARS(vn, remove);
 	struct vnode *dvp = ap->a_dvp;
-	struct vnode *vp = ap->a_vp;
+	struct vnode *vp;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct puffs_node *pn = VPTOPP(vp);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error;
 
+	error = vget(dvp, LK_EXCLUSIVE);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_remove: EAGAIN on parent vnode %p %s\n",
+		    dvp, ncp->nc_name));
+		return EAGAIN;
+	}
+
+	error = cache_vget(nch, cred, LK_EXCLUSIVE, &vp);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_remove: cache_vget error: %p %s\n",
+		    dvp, ncp->nc_name));
+		goto out;
+	}
+	if (vp->v_type == VDIR) {
+		error = EISDIR;
+		goto out;
+	}
+
 	PUFFS_MSG_ALLOC(vn, remove);
 	remove_msg->pvnr_cookie_targ = VPTOPNC(vp);
 	puffs_makecn(&remove_msg->pvnr_cn, &remove_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	puffs_msg_setinfo(park_remove, PUFFSOP_VN,
 	    PUFFS_VN_REMOVE, VPTOPNC(dvp));
 
@@ -884,23 +957,40 @@ puffs_vnop_remove(struct vop_old_remove_args *ap)
 	PUFFS_MSG_RELEASE(remove);
 
 	error = checkerr(pmp, error, __func__);
+
+ out:
+	vput(dvp);
+	vn_unlock(vp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, NULL);
+	}
+	vrele(vp);
 	return error;
 }
 
 static int
-puffs_vnop_mkdir(struct vop_old_mkdir_args *ap)
+puffs_vnop_mkdir(struct vop_nmkdir_args *ap)
 {
 	PUFFS_MSG_VARS(vn, mkdir);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int error;
 
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_mkdir: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
+	}
+
 	PUFFS_MSG_ALLOC(vn, mkdir);
 	puffs_makecn(&mkdir_msg->pvnr_cn, &mkdir_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	mkdir_msg->pvnr_va = *ap->a_vap;
 	puffs_msg_setinfo(park_mkdir, PUFFSOP_VN,
 	    PUFFS_VN_MKDIR, VPTOPNC(dvp));
@@ -912,19 +1002,24 @@ puffs_vnop_mkdir(struct vop_old_mkdir_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    mkdir_msg->pvnr_newnode, cnp, VDIR, 0);
+	    mkdir_msg->pvnr_newnode, ncp, VDIR, 0);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_MKDIR, dpn->pn_cookie,
-		    mkdir_msg->pvnr_newnode, cnp);
+		    mkdir_msg->pvnr_newnode, ncp, cred);
 
  out:
+	vput(dvp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, *ap->a_vpp);
+	}
 	PUFFS_MSG_RELEASE(mkdir);
 	return error;
 }
 
 static int
 callrmdir(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
-	struct componentname *cnp)
+	struct namecache *ncp, struct ucred *cred)
 {
 	PUFFS_MSG_VARS(vn, rmdir);
 	int error;
@@ -932,7 +1027,7 @@ callrmdir(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
 	PUFFS_MSG_ALLOC(vn, rmdir);
 	rmdir_msg->pvnr_cookie_targ = ck;
 	puffs_makecn(&rmdir_msg->pvnr_cn, &rmdir_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	puffs_msg_setinfo(park_rmdir, PUFFSOP_VN, PUFFS_VN_RMDIR, dck);
 
 	PUFFS_MSG_ENQUEUEWAIT(pmp, park_rmdir, error);
@@ -942,21 +1037,40 @@ callrmdir(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
 }
 
 static int
-puffs_vnop_rmdir(struct vop_old_rmdir_args *ap)
+puffs_vnop_rmdir(struct vop_nrmdir_args *ap)
 {
 	PUFFS_MSG_VARS(vn, rmdir);
 	struct vnode *dvp = ap->a_dvp;
-	struct vnode *vp = ap->a_vp;
+	struct vnode *vp;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct puffs_node *pn = VPTOPP(vp);
 	struct puffs_mount *pmp = MPTOPUFFSMP(dvp->v_mount);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	int error;
+
+	error = vget(dvp, LK_EXCLUSIVE);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_rmdir: EAGAIN on parent vnode %p %s\n",
+		    dvp, ncp->nc_name));
+		return EAGAIN;
+	}
+	error = cache_vget(nch, cred, LK_EXCLUSIVE, &vp);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_rmdir: cache_vget error: %p %s\n",
+		    dvp, ncp->nc_name));
+		goto out;
+	}
+	if (vp->v_type != VDIR) {
+		error = ENOTDIR;
+		goto out;
+	}
 
 	PUFFS_MSG_ALLOC(vn, rmdir);
 	rmdir_msg->pvnr_cookie_targ = VPTOPNC(vp);
 	puffs_makecn(&rmdir_msg->pvnr_cn, &rmdir_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	puffs_msg_setinfo(park_rmdir, PUFFSOP_VN,
 	    PUFFS_VN_RMDIR, VPTOPNC(dvp));
 
@@ -965,30 +1079,47 @@ puffs_vnop_rmdir(struct vop_old_rmdir_args *ap)
 
 	PUFFS_MSG_RELEASE(rmdir);
 
-	/* XXX: some call cache_purge() *for both vnodes* here, investigate */
+	error = checkerr(pmp, error, __func__);
 
+ out:
+	vput(dvp);
+	vn_unlock(vp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, NULL);
+	}
+	vrele(vp);
 	return error;
 }
 
 static int
-puffs_vnop_link(struct vop_old_link_args *ap)
+puffs_vnop_link(struct vop_nlink_args *ap)
 {
 	PUFFS_MSG_VARS(vn, link);
-	struct vnode *dvp = ap->a_tdvp;
+	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct puffs_node *pn = VPTOPP(vp);
 	struct puffs_mount *pmp = MPTOPUFFSMP(dvp->v_mount);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	int error;
 
 	if (vp->v_mount != dvp->v_mount)
 		return EXDEV;
 
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_link: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
+	}
+	vn_lock(vp, LK_EXCLUSIVE);
+
 	PUFFS_MSG_ALLOC(vn, link);
 	link_msg->pvnr_cookie_targ = VPTOPNC(vp);
 	puffs_makecn(&link_msg->pvnr_cn, &link_msg->pvnr_cn_cred,
-	    cnp, PUFFS_USE_FULLPNBUF(pmp));
+	    ncp, cred);
 	puffs_msg_setinfo(park_link, PUFFSOP_VN,
 	    PUFFS_VN_LINK, VPTOPNC(dvp));
 
@@ -1003,28 +1134,43 @@ puffs_vnop_link(struct vop_old_link_args *ap)
 	 * XXX: stay in touch with the cache.  I don't like this, but
 	 * don't have a better solution either.  See also puffs_rename().
 	 */
-	if (error == 0)
+	if (error == 0) {
 		puffs_updatenode(pn, PUFFS_UPDATECTIME);
+	}
 
+	vput(dvp);
+	vn_unlock(vp);
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, vp);
+	}
 	return error;
 }
 
 static int
-puffs_vnop_symlink(struct vop_old_symlink_args *ap)
+puffs_vnop_symlink(struct vop_nsymlink_args *ap)
 {
 	PUFFS_MSG_VARS(vn, symlink);
 	struct vnode *dvp = ap->a_dvp;
 	struct puffs_node *dpn = VPTOPP(dvp);
 	struct mount *mp = dvp->v_mount;
 	struct puffs_mount *pmp = MPTOPUFFSMP(dvp->v_mount);
-	struct componentname *cnp = ap->a_cnp;
+	struct nchandle *nch = ap->a_nch;
+	struct namecache *ncp = nch->ncp;
+	struct ucred *cred = ap->a_cred;
 	int error;
+
+	if ((error = vget(dvp, LK_EXCLUSIVE)) != 0) {
+		DPRINTF(("puffs_vnop_symlink: EAGAIN on ncp %p %s\n",
+		    ncp, ncp->nc_name));
+		return EAGAIN;
+	}
 
 	*ap->a_vpp = NULL;
 
 	PUFFS_MSG_ALLOC(vn, symlink);
 	puffs_makecn(&symlink_msg->pvnr_cn, &symlink_msg->pvnr_cn_cred,
-		cnp, PUFFS_USE_FULLPNBUF(pmp));
+		ncp, cred);
 	symlink_msg->pvnr_va = *ap->a_vap;
 	(void)strlcpy(symlink_msg->pvnr_link, ap->a_target,
 	    sizeof(symlink_msg->pvnr_link));
@@ -1038,14 +1184,18 @@ puffs_vnop_symlink(struct vop_old_symlink_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    symlink_msg->pvnr_newnode, cnp, VLNK, 0);
+	    symlink_msg->pvnr_newnode, ncp, VLNK, 0);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_SYMLINK, dpn->pn_cookie,
-		    symlink_msg->pvnr_newnode, cnp);
+		    symlink_msg->pvnr_newnode, ncp, cred);
 
  out:
+	vput(dvp);
 	PUFFS_MSG_RELEASE(symlink);
-
+	if (!error) {
+		cache_setunresolved(nch);
+		cache_setvp(nch, *ap->a_vpp);
+	}
 	return error;
 }
 
@@ -1086,19 +1236,61 @@ puffs_vnop_readlink(struct vop_readlink_args *ap)
 }
 
 static int
-puffs_vnop_rename(struct vop_old_rename_args *ap)
+puffs_vnop_rename(struct vop_nrename_args *ap)
 {
 	PUFFS_MSG_VARS(vn, rename);
-	struct vnode *fdvp = ap->a_fdvp, *fvp = ap->a_fvp;
-	struct vnode *tdvp = ap->a_tdvp, *tvp = ap->a_tvp;
-	struct puffs_node *fpn = VPTOPP(fvp);
+	struct vnode *fdvp = ap->a_fdvp;
+	struct vnode *tdvp = ap->a_tdvp;
+	struct vnode *fvp = NULL;
+	struct vnode *tvp = NULL;
+	struct nchandle *fnch = ap->a_fnch;
+	struct nchandle *tnch = ap->a_tnch;
+	struct ucred *cred = ap->a_cred;
 	struct puffs_mount *pmp = MPTOPUFFSMP(fdvp->v_mount);
+	struct puffs_node *fpn;
 	int error;
 	boolean_t doabort = TRUE;
 
+	error = vget(fdvp, LK_EXCLUSIVE);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_rename: EAGAIN on fdvp vnode %p %s\n",
+		    fdvp, fnch->ncp->nc_name));
+		return EAGAIN;
+	}
+	error = cache_vref(fnch, cred, &fvp);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_rename: cache_vref fncp error: %s\n",
+		    fnch->ncp->nc_name));
+		vput(fdvp);
+		return EAGAIN;
+	}
+	fpn = VPTOPP(fvp);
+	vn_unlock(fdvp);
+
+	error = vget(tdvp, LK_EXCLUSIVE);
+	if (error != 0) {
+		DPRINTF(("puffs_vnop_rename: EAGAIN on tdvp vnode %p %s\n",
+		    tdvp, tnch->ncp->nc_name));
+		vrele(fdvp);
+		vrele(fvp);
+		return EAGAIN;
+	}
+	cache_vget(tnch, cred, LK_EXCLUSIVE, &tvp);
+
 	if ((fvp->v_mount != tdvp->v_mount) ||
 	    (tvp && (fvp->v_mount != tvp->v_mount))) {
-		ERROUT(EXDEV);
+		error = EXDEV;
+		goto out;
+	}
+
+	if (tvp) {
+		if (fvp->v_type == VDIR && tvp->v_type != VDIR) {
+			error = ENOTDIR;
+			goto out;
+		} else if (fvp->v_type != VDIR && tvp->v_type == VDIR) {
+			error = EISDIR;
+			goto out;
+		}
 	}
 
 	PUFFS_MSG_ALLOC(vn, rename);
@@ -1109,9 +1301,9 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	else
 		rename_msg->pvnr_cookie_targ = NULL;
 	puffs_makecn(&rename_msg->pvnr_cn_src, &rename_msg->pvnr_cn_src_cred,
-	    ap->a_fcnp, PUFFS_USE_FULLPNBUF(pmp));
+	    fnch->ncp, cred);
 	puffs_makecn(&rename_msg->pvnr_cn_targ, &rename_msg->pvnr_cn_targ_cred,
-	    ap->a_tcnp, PUFFS_USE_FULLPNBUF(pmp));
+	    tnch->ncp, cred);
 	puffs_msg_setinfo(park_rename, PUFFSOP_VN,
 	    PUFFS_VN_RENAME, VPTOPNC(fdvp));
 
@@ -1124,8 +1316,10 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	 * XXX: stay in touch with the cache.  I don't like this, but
 	 * don't have a better solution either.  See also puffs_link().
 	 */
-	if (error == 0)
+	if (error == 0) {
 		puffs_updatenode(fpn, PUFFS_UPDATECTIME);
+		cache_rename(fnch, tnch);
+	}
 
  out:
 	if (tvp != NULL)
@@ -1301,15 +1495,16 @@ struct vop_ops puffs_fifo_vops = {
 
 struct vop_ops puffs_vnode_vops = {
 	.vop_default =			vop_defaultop,
-	.vop_old_lookup =		puffs_vnop_lookup,
-	.vop_old_create =		puffs_vnop_create,
-	.vop_old_mkdir =		puffs_vnop_mkdir,
-	.vop_old_rmdir =		puffs_vnop_rmdir,
-	.vop_old_remove =		puffs_vnop_remove,
-	.vop_old_rename =		puffs_vnop_rename,
-	.vop_old_link =			puffs_vnop_link,
-	.vop_old_symlink =		puffs_vnop_symlink,
-	.vop_old_mknod =		puffs_vnop_mknod,
+	.vop_nresolve =			puffs_vnop_lookup,
+	.vop_nlookupdotdot =		puffs_vnop_lookupdotdot,
+	.vop_ncreate =			puffs_vnop_create,
+	.vop_nmkdir =			puffs_vnop_mkdir,
+	.vop_nrmdir =			puffs_vnop_rmdir,
+	.vop_nremove =			puffs_vnop_remove,
+	.vop_nrename =			puffs_vnop_rename,
+	.vop_nlink =			puffs_vnop_link,
+	.vop_nsymlink =			puffs_vnop_symlink,
+	.vop_nmknod =			puffs_vnop_mknod,
 	.vop_access =			puffs_vnop_access,
 	.vop_getattr =			puffs_vnop_getattr,
 	.vop_setattr =			puffs_vnop_setattr,

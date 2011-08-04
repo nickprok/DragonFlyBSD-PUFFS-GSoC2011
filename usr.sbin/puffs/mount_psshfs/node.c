@@ -47,15 +47,6 @@ psshfs_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct vattr va;
 	int rv;
 
-	if (PCNISDOTDOT(pcn)) {
-		psn = psn_dir->parent->pn_data;
-		psn->stat &= ~PSN_RECLAIMED;
-
-		puffs_newinfo_setcookie(pni, psn_dir->parent);
-		puffs_newinfo_setvtype(pni, VDIR);
-		return 0;
-	}
-
 	rv = sftp_readdir(pu, pctx, pn_dir);
 	if (rv) {
 		if (rv != EPERM)
@@ -107,6 +98,21 @@ psshfs_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	puffs_newinfo_setvtype(pni, pn->pn_va.va_type);
 	puffs_newinfo_setsize(pni, pn->pn_va.va_size);
 
+	return 0;
+}
+
+int
+psshfs_node_lookupdotdot(struct puffs_usermount *pu, puffs_cookie_t opc,
+	struct puffs_newinfo *pni, const struct puffs_cn *pcn)
+{
+	struct puffs_node *pn_dir = opc;
+	struct psshfs_node *psn, *psn_dir = pn_dir->pn_data;
+
+	psn = psn_dir->parent->pn_data;
+	psn->stat &= ~PSN_RECLAIMED;
+
+	puffs_newinfo_setcookie(pni, psn_dir->parent);
+	puffs_newinfo_setvtype(pni, VDIR);
 	return 0;
 }
 

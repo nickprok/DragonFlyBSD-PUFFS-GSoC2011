@@ -48,22 +48,13 @@ int puffsdebug = 1;
 
 void
 puffs_makecn(struct puffs_kcn *pkcn, struct puffs_kcred *pkcr,
-	const struct componentname *cn, int full)
+	const struct namecache *ncp, struct ucred *cred)
 {
+	KKASSERT(ncp->nc_nlen < sizeof(pkcn->pkcn_name));
+	pkcn->pkcn_namelen =  ncp->nc_nlen;
+	strlcpy(pkcn->pkcn_name, ncp->nc_name, sizeof(pkcn->pkcn_name));
 
-	pkcn->pkcn_nameiop = cn->cn_nameiop;
-	pkcn->pkcn_flags = cn->cn_flags;
-
-	if (full) {
-		(void)strcpy(pkcn->pkcn_name, cn->cn_nameptr);
-	} else {
-		(void)memcpy(pkcn->pkcn_name, cn->cn_nameptr, cn->cn_namelen);
-		pkcn->pkcn_name[cn->cn_namelen] = '\0';
-	}
-	pkcn->pkcn_namelen = cn->cn_namelen;
-	pkcn->pkcn_consume = 0;
-
-	puffs_credcvt(pkcr, cn->cn_cred);
+	puffs_credcvt(pkcr, cred);
 }
 
 /*

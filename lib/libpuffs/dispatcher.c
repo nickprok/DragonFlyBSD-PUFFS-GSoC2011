@@ -295,6 +295,53 @@ dispatch(struct puffs_cc *pcc)
 			break;
 		}
 
+		case PUFFS_VN_LOOKUPDOTDOT:
+		{
+			struct puffs_kcn kcn = {
+				.pkcn_name = "..",
+				.pkcn_namelen = 2,
+			};
+			struct puffs_vnmsg_lookupdotdot *auxt = auxbuf;
+			struct puffs_newinfo pni;
+			struct puffs_cn pcn;
+
+			pcn.pcn_pkcnp = &kcn;
+			PUFFS_KCREDTOCRED(pcn.pcn_cred, &auxt->pvnr_cred);
+			pni.pni_cookie = &auxt->pvnr_newnode;
+			pni.pni_vtype = NULL;
+			pni.pni_size = NULL;
+
+			if (buildpath) {
+				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
+				if (error)
+					break;
+			}
+
+			/* lookup *must* be present */
+			error = pops->puffs_node_lookupdotdot(pu, opcookie,
+			    &pni, &pcn);
+
+			if (buildpath) {
+				if (error) {
+					pu->pu_pathfree(pu, &pcn.pcn_po_full);
+				} else {
+					struct puffs_node *pn;
+
+					/*
+					 * did we get a new node or a
+					 * recycled node?
+					 */
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+					if (pn->pn_po.po_path == NULL)
+						pn->pn_po = pcn.pcn_po_full;
+					else
+						pu->pu_pathfree(pu,
+						    &pcn.pcn_po_full);
+				}
+			}
+			break;
+		}
+
 		case PUFFS_VN_CREATE:
 		{
 			struct puffs_vnmsg_create *auxt = auxbuf;
