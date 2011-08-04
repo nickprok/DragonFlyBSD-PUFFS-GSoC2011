@@ -317,29 +317,6 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 	return error;
 }
 
-#ifdef XXXDF
-#define REFPN_AND_UNLOCKVP(a, b)					\
-do {									\
-	lockmgr(&b->pn_mtx, LK_EXCLUSIVE);				\
-	puffs_referencenode(b);						\
-	lockmgr(&b->pn_mtx, LK_RELEASE);				\
-	vn_unlock(a);						\
-} while (/*CONSTCOND*/0)
-
-#define REFPN(b)							\
-do {									\
-	lockmgr(&b->pn_mtx, LK_EXCLUSIVE);				\
-	puffs_referencenode(b);						\
-	lockmgr(&b->pn_mtx, LK_RELEASE);				\
-} while (/*CONSTCOND*/0)
-
-#define RELEPN_AND_VP(a, b)						\
-do {									\
-	puffs_releasenode(b);						\
-	vrele(a);							\
-} while (/*CONSTCOND*/0)
-#endif
-
 static int
 puffs_vnop_create(struct vop_old_create_args *ap)
 {
@@ -377,10 +354,6 @@ puffs_vnop_create(struct vop_old_create_args *ap)
 		    create_msg->pvnr_newnode, cnp);
 
  out:
-#ifdef XXXDF
-	vput(dvp);
-#endif
-
 	DPRINTF(("puffs_create: return %d\n", error));
 	PUFFS_MSG_RELEASE(create);
 	return error;
@@ -535,9 +508,6 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 	if (vp->v_type == VBLK || vp->v_type == VCHR)
 		return ENOTSUP;
 
-#ifdef XXXDF
-	REFPN(pn);
-#endif
 	vap = ap->a_vap;
 
 	PUFFS_MSG_ALLOC(vn, getattr);
@@ -574,9 +544,6 @@ puffs_vnop_getattr(struct vop_getattr_args *ap)
 	}
 
  out:
-#ifdef XXXDF
-	puffs_releasenode(pn);
-#endif
 	PUFFS_MSG_RELEASE(getattr);
 	return error;
 }
@@ -1035,21 +1002,9 @@ puffs_vnop_remove(struct vop_old_remove_args *ap)
 	    PUFFS_VN_REMOVE, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_remove);
-#ifdef XXXDF
-	REFPN_AND_UNLOCKVP(dvp, dpn);
-	if (dvp == vp)
-		REFPN(pn);
-	else
-		REFPN_AND_UNLOCKVP(vp, pn);
-#endif
 	error = puffs_msg_wait2(pmp, park_remove, dpn, pn);
 
 	PUFFS_MSG_RELEASE(remove);
-
-#ifdef XXXDF
-	RELEPN_AND_VP(dvp, dpn);
-	RELEPN_AND_VP(vp, pn);
-#endif
 
 	error = checkerr(pmp, error, __func__);
 	return error;
@@ -1086,9 +1041,6 @@ puffs_vnop_mkdir(struct vop_old_mkdir_args *ap)
 		    mkdir_msg->pvnr_newnode, cnp);
 
  out:
-#ifdef XXXDF
-	vput(dvp);
-#endif
 	PUFFS_MSG_RELEASE(mkdir);
 	return error;
 }
@@ -1132,19 +1084,11 @@ puffs_vnop_rmdir(struct vop_old_rmdir_args *ap)
 	    PUFFS_VN_RMDIR, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_rmdir);
-#ifdef XXXDF
-	REFPN_AND_UNLOCKVP(dvp, dpn);
-	REFPN_AND_UNLOCKVP(vp, pn);
-#endif
 	error = puffs_msg_wait2(pmp, park_rmdir, dpn, pn);
 
 	PUFFS_MSG_RELEASE(rmdir);
 
 	/* XXX: some call cache_purge() *for both vnodes* here, investigate */
-#ifdef XXXDF
-	RELEPN_AND_VP(dvp, dpn);
-	RELEPN_AND_VP(vp, pn);
-#endif
 
 	return error;
 }
@@ -1172,10 +1116,6 @@ puffs_vnop_link(struct vop_old_link_args *ap)
 	    PUFFS_VN_LINK, VPTOPNC(dvp));
 
 	puffs_msg_enqueue(pmp, park_link);
-#ifdef XXXDF
-	REFPN_AND_UNLOCKVP(dvp, dpn);
-	REFPN(pn);
-#endif
 	error = puffs_msg_wait2(pmp, park_link, dpn, pn);
 
 	PUFFS_MSG_RELEASE(link);
@@ -1188,11 +1128,6 @@ puffs_vnop_link(struct vop_old_link_args *ap)
 	 */
 	if (error == 0)
 		puffs_updatenode(pn, PUFFS_UPDATECTIME);
-
-#ifdef XXXDF
-	RELEPN_AND_VP(dvp, dpn);
-	puffs_releasenode(pn);
-#endif
 
 	return error;
 }
@@ -1232,9 +1167,6 @@ puffs_vnop_symlink(struct vop_old_symlink_args *ap)
 		    symlink_msg->pvnr_newnode, cnp);
 
  out:
-#ifdef XXXDF
-	vput(dvp);
-#endif
 	PUFFS_MSG_RELEASE(symlink);
 
 	return error;
@@ -1319,10 +1251,6 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 		puffs_updatenode(fpn, PUFFS_UPDATECTIME);
 
  out:
-#ifdef XXXDF
-	if (doabort)
-		VOP_ABORTOP(tdvp, ap->a_tcnp);
-#endif
 	if (tvp != NULL)
 		vput(tvp);
 	if (tdvp == tvp)
@@ -1330,10 +1258,6 @@ puffs_vnop_rename(struct vop_old_rename_args *ap)
 	else
 		vput(tdvp);
 
-#ifdef XXXDF
-	if (doabort)
-		VOP_ABORTOP(fdvp, ap->a_fcnp);
-#endif
 	vrele(fdvp);
 	vrele(fvp);
 
