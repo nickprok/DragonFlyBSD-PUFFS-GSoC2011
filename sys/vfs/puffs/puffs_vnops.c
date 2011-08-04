@@ -186,7 +186,7 @@ puffs_vnop_lookup(struct vop_old_lookup_args *ap)
 		goto out;
 	}
 
-	error = puffs_cookie2vnode(pmp, lookup_msg->pvnr_newnode, 1, 1, &vp);
+	error = puffs_cookie2vnode(pmp, lookup_msg->pvnr_newnode, 1, &vp);
 	if (error == PUFFS_NOSUCHCOOKIE) {
 		error = puffs_getvnode(dvp->v_mount,
 		    lookup_msg->pvnr_newnode, lookup_msg->pvnr_vtype,

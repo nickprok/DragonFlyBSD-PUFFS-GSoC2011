@@ -428,7 +428,7 @@ puffs_vfsop_root(struct mount *mp, struct vnode **vpp)
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	int rv;
 
-	rv = puffs_cookie2vnode(pmp, pmp->pmp_root_cookie, 1, 1, vpp);
+	rv = puffs_cookie2vnode(pmp, pmp->pmp_root_cookie, 1, vpp);
 	KKASSERT(rv != PUFFS_NOSUCHCOOKIE);
 
 	return rv;

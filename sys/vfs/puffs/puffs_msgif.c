@@ -844,7 +844,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 	 * reason we need to eventually bump locking to userspace, as we
 	 * will need to lock the node if we wish to do flushes.
 	 */
-	rv = puffs_cookie2vnode(pmp, pf->pf_cookie, 0, 0, &vp);
+	rv = puffs_cookie2vnode(pmp, pf->pf_cookie, 0, &vp);
 	if (rv) {
 		if (rv == PUFFS_NOSUCHCOOKIE)
 			rv = ENOENT;
@@ -900,9 +900,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 		rv = EINVAL;
 	}
 
-#ifdef XXXDF
-	vrele(vp);
-#endif
+	vput(vp);
 
  out:
 	puffs_msg_sendresp(pmp, &pf->pf_req, rv);

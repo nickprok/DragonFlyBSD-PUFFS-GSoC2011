@@ -326,13 +326,13 @@ puffs_makeroot(struct puffs_mount *pmp)
  * vnode lock, e.g. file server issued putpages.
  */
 int
-puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
+puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck,
 	int willcreate, struct vnode **vpp)
 {
 	struct puffs_node *pnode;
 	struct puffs_newcookie *pnc;
 	struct vnode *vp;
-	int vgetflags, rv;
+	int rv;
 
 	/*
 	 * Handle root in a special manner, since we want to make sure
@@ -341,9 +341,6 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 	if (ck == pmp->pmp_root_cookie) {
 		if ((rv = puffs_makeroot(pmp)))
 			return rv;
-		if (!lock)
-			vn_unlock(pmp->pmp_root);
-
 		*vpp = pmp->pmp_root;
 		return 0;
 	}
@@ -364,10 +361,7 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 	vhold(vp);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
-	vgetflags = 0;
-	if (lock)
-		vgetflags |= LK_EXCLUSIVE;
-	rv = vget(vp, vgetflags);
+	rv = vget(vp, LK_EXCLUSIVE);
 	vdrop(vp);
 	if (rv)
 		return rv;
