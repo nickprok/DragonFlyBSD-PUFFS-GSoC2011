@@ -186,7 +186,7 @@ static void
 parkdump(struct puffs_msgpark *park)
 {
 
-	DPRINTF(("park %p, preq %p, id %" PRIu64 "\n"
+	DPRINTF_VERBOSE(("park %p, preq %p, id %" PRIu64 "\n"
 	    "\tcopy %zu, max %zu - done: %p/%p\n"
 	    "\tflags 0x%08x, refcount %d, cv/mtx: %p/%p\n",
 	    park, park->park_preq, park->park_preq->preq_id,
@@ -207,7 +207,7 @@ parkqdump(struct puffs_wq *q, int dumpall)
 			parkdump(park);
 		total++;
 	}
-	DPRINTF(("puffs waitqueue at %p dumped, %d total\n", q, total));
+	DPRINTF_VERBOSE(("puffs waitqueue at %p dumped, %d total\n", q, total));
 
 }
 #endif /* PUFFSDEBUG */
@@ -349,7 +349,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 
 	/* fill in caller information */
 	if (td->td_proc == NULL || td->td_lwp == NULL) {
-		DPRINTF(("puffs_msg_enqueue: no process\n"));
+		DPRINTF_VERBOSE(("puffs_msg_enqueue: no process\n"));
 		preq->preq_pid = 1;
 		preq->preq_lid = 0;
 		goto noproc;
@@ -386,7 +386,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 				park->park_preq->preq_opclass |=
 				    PUFFSOPFLAG_FAF;
 				park->park_flags &= ~PARKFLAG_WANTREPLY;
-				DPRINTF(("puffs_msg_enqueue: "
+				DPRINTF_VERBOSE(("puffs_msg_enqueue: "
 				    "converted to FAF %p\n", park));
 			} else {
 				return;
@@ -421,7 +421,7 @@ puffs_msg_enqueue(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	cv_broadcast(&pmp->pmp_msg_waiter_cv);
 	putter_notify(pmp->pmp_pi);
 
-	DPRINTF(("touser: req %" PRIu64 ", preq: %p, park: %p, "
+	DPRINTF_VERBOSE(("touser: req %" PRIu64 ", preq: %p, park: %p, "
 	    "c/t: 0x%x/0x%x, f: 0x%x\n", preq->preq_id, preq, park,
 	    preq->preq_opclass, preq->preq_optype, park->park_flags));
 }
@@ -480,7 +480,7 @@ puffs_msg_wait(struct puffs_mount *pmp, struct puffs_msgpark *park)
 	}
 
 	error = cv_wait_sig(&park->park_cv, &park->park_mtx);
-	DPRINTF(("puffs_touser: waiter for %p woke up with %d\n",
+	DPRINTF_VERBOSE(("puffs_touser: waiter for %p woke up with %d\n",
 	    park, error));
 	if (error) {
 		park->park_flags |= PARKFLAG_WAITERGONE;
@@ -617,13 +617,13 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 
 		/* need platinum yendorian express card? */
 		if (TAILQ_EMPTY(&pmp->pmp_msg_touser)) {
-			DPRINTF(("puffs_getout: no outgoing op, "));
+			DPRINTF_VERBOSE(("puffs_getout: no outgoing op, "));
 			if (nonblock) {
-				DPRINTF(("returning EWOULDBLOCK\n"));
+				DPRINTF_VERBOSE(("returning EWOULDBLOCK\n"));
 				error = EWOULDBLOCK;
 				break;
 			}
-			DPRINTF(("waiting ...\n"));
+			DPRINTF_VERBOSE(("waiting ...\n"));
 
 			error = cv_wait_sig(&pmp->pmp_msg_waiter_cv,
 			    &pmp->pmp_lock);
@@ -640,11 +640,11 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 		puffs_msgpark_reference(park);
 
-		DPRINTF(("puffs_getout: found park at %p, ", park));
+		DPRINTF_VERBOSE(("puffs_getout: found park at %p, ", park));
 
 		/* If it's a goner, don't process any furher */
 		if (park->park_flags & PARKFLAG_WAITERGONE) {
-			DPRINTF(("waitergone!\n"));
+			DPRINTF_VERBOSE(("waitergone!\n"));
 			puffs_msgpark_release(park);
 			continue;
 		}
@@ -665,7 +665,7 @@ puffs_msgif_getout(void *this, size_t maxsize, int nonblock,
 		}
 #endif
 
-		DPRINTF(("returning\n"));
+		DPRINTF_VERBOSE(("returning\n"));
 
 		/*
 		 * Ok, we found what we came for.  Release it from the
@@ -709,25 +709,25 @@ puffs_msgif_releaseout(void *this, void *parkptr, int status)
 	struct puffs_mount *pmp = this;
 	struct puffs_msgpark *park = parkptr;
 
-	DPRINTF(("puffs_releaseout: returning park %p, errno %d: " ,
+	DPRINTF_VERBOSE(("puffs_releaseout: returning park %p, errno %d: " ,
 	    park, status));
 	lockmgr(&pmp->pmp_lock, LK_EXCLUSIVE);
 	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	if (park->park_flags & PARKFLAG_WANTREPLY) {
 		if (status == 0) {
-			DPRINTF(("enqueue replywait\n"));
+			DPRINTF_VERBOSE(("enqueue replywait\n"));
 			TAILQ_INSERT_TAIL(&pmp->pmp_msg_replywait, park,
 			    park_entries);
 			park->park_flags |= PARKFLAG_ONQUEUE2;
 		} else {
-			DPRINTF(("error path!\n"));
+			DPRINTF_VERBOSE(("error path!\n"));
 			park->park_preq->preq_rv = status;
 			park->park_flags |= PARKFLAG_DONE;
 			cv_signal(&park->park_cv);
 		}
 		puffs_msgpark_release(park);
 	} else {
-		DPRINTF(("release\n"));
+		DPRINTF_VERBOSE(("release\n"));
 		puffs_msgpark_release1(park, 2);
 	}
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
@@ -765,7 +765,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 			break;
 	}
 	if (park == NULL) {
-		DPRINTF(("puffsop_msg: no request: %" PRIu64 "\n",
+		DPRINTF_VERBOSE(("puffsop_msg: no request: %" PRIu64 "\n",
 		    preq->preq_id));
 		lockmgr(&pmp->pmp_lock, LK_RELEASE);
 		return; /* XXX send error */
@@ -774,7 +774,7 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	lockmgr(&park->park_mtx, LK_EXCLUSIVE);
 	puffs_msgpark_reference(park);
 	if (pth->pth_framelen > park->park_maxlen) {
-		DPRINTF(("puffsop_msg: invalid buffer length: "
+		DPRINTF_VERBOSE(("puffsop_msg: invalid buffer length: "
 		    "%" PRIu64 " (req %" PRIu64 ", \n", pth->pth_framelen,
 		    preq->preq_id));
 		park->park_preq->preq_rv = EPROTO;
@@ -791,20 +791,20 @@ puffsop_msg(void *this, struct puffs_req *preq)
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
 	if (wgone) {
-		DPRINTF(("puffsop_msg: bad service - waiter gone for "
+		DPRINTF_VERBOSE(("puffsop_msg: bad service - waiter gone for "
 		    "park %p\n", park));
 	} else {
 		memcpy(park->park_preq, preq, pth->pth_framelen);
 
 		if (park->park_flags & PARKFLAG_CALL) {
-			DPRINTF(("puffsop_msg: call for %p, arg %p\n",
+			DPRINTF_VERBOSE(("puffsop_msg: call for %p, arg %p\n",
 			    park->park_preq, park->park_donearg));
 			park->park_done(pmp, preq, park->park_donearg);
 		}
 	}
 
 	if (!wgone) {
-		DPRINTF(("puffs_putop: flagging done for "
+		DPRINTF_VERBOSE(("puffs_putop: flagging done for "
 		    "park %p\n", park));
 		cv_signal(&park->park_cv);
 	}
@@ -921,7 +921,8 @@ puffs_msgif_dispatch(void *this, struct putter_hdr *pth)
 	switch (PUFFSOP_OPCLASS(preq->preq_opclass)) {
 	case PUFFSOP_VN:
 	case PUFFSOP_VFS:
-		DPRINTF(("dispatch: vn/vfs message 0x%x\n", preq->preq_optype));
+		DPRINTF_VERBOSE(("dispatch: vn/vfs message 0x%x\n",
+		    preq->preq_optype));
 		puffsop_msg(pmp, preq);
 		break;
 
