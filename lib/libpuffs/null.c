@@ -389,8 +389,7 @@ puffs_null_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 /*ARGSUSED*/
 int
 puffs_null_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
-	const struct puffs_cred *pcred, int how,
-	off_t offlo, off_t offhi)
+	int how)
 {
 	struct puffs_node *pn = opc;
 	int fd, rv;

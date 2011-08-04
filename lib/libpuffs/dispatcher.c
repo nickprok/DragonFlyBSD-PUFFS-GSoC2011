@@ -467,16 +467,14 @@ dispatch(struct puffs_cc *pcc)
 		case PUFFS_VN_FSYNC:
 		{
 			struct puffs_vnmsg_fsync *auxt = auxbuf;
-			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
 
 			if (pops->puffs_node_fsync == NULL) {
 				error = 0;
 				break;
 			}
 
-			error = pops->puffs_node_fsync(pu, opcookie, pcr,
-			    auxt->pvnr_flags, auxt->pvnr_offlo,
-			    auxt->pvnr_offhi);
+			error = pops->puffs_node_fsync(pu, opcookie,
+			    auxt->pvnr_flags);
 			break;
 		}
 

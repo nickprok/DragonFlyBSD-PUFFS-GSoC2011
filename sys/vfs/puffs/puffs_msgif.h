@@ -454,9 +454,6 @@ struct puffs_vnmsg_poll {
 struct puffs_vnmsg_fsync {
 	struct puffs_req	pvn_pr;
 
-	struct puffs_kcred	pvnr_cred;		/* OUT	*/
-	off_t			pvnr_offlo;		/* OUT	*/
-	off_t			pvnr_offhi;		/* OUT	*/
 	int			pvnr_flags;		/* OUT	*/
 };
 

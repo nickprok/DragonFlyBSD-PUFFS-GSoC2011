@@ -57,7 +57,7 @@ static int callrmdir(struct puffs_mount *, puffs_cookie_t, puffs_cookie_t,
 			   struct componentname *);
 static void callinactive(struct puffs_mount *, puffs_cookie_t, int);
 static void callreclaim(struct puffs_mount *, puffs_cookie_t);
-static int  flushvncache(struct vnode *, boolean_t);
+static int  flushvncache(struct vnode *, int);
 
 
 #define PUFFS_ABORT_LOOKUP	1
@@ -566,13 +566,14 @@ puffs_vnop_inactive(struct vop_inactive_args *ap)
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pnode = VPTOPP(vp);
 
+	flushvncache(vp, MNT_NOWAIT);
+
 	if (doinact(pmp, pnode->pn_stat & PNODE_DOINACT)) {
 		/*
 		 * do not wait for reply from userspace, otherwise it may
 		 * deadlock.
 		 */
 
-		flushvncache(vp, FALSE);
 		PUFFS_MSG_ALLOC(vn, inactive);
 		puffs_msg_setfaf(park_inactive);
 		puffs_msg_setinfo(park_inactive, PUFFSOP_VN,
@@ -622,6 +623,8 @@ puffs_vnop_reclaim(struct vop_reclaim_args *ap)
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pnode = VPTOPP(vp);
 	boolean_t notifyserver = TRUE;
+
+	vinvalbuf(vp, V_SAVE, 0, 0);
 
 	/*
 	 * first things first: check if someone is trying to reclaim the
@@ -767,19 +770,18 @@ puffs_vnop_readdir(struct vop_readdir_args *ap)
 #undef CSIZE
 
 static int
-flushvncache(struct vnode *vp, boolean_t wait)
+flushvncache(struct vnode *vp, int waitfor)
 {
 	struct puffs_node *pn = VPTOPP(vp);
-	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct vattr va;
-	int pflags, error;
+	int error = 0;
 
 	/* flush out information from our metacache, see vop_setattr */
 	if (pn->pn_stat & PNODE_METACACHE_MASK
 	    && (pn->pn_stat & PNODE_DYING) == 0) {
 		vattr_null(&va);
-		error = dosetattr(vp, &va, FSCRED,
-		    SETATTR_CHSIZE | (wait ? 0 : SETATTR_ASYNC));
+		error = dosetattr(vp, &va, FSCRED, SETATTR_CHSIZE |
+		    (waitfor == MNT_NOWAIT ? 0 : SETATTR_ASYNC));
 		if (error)
 			return error;
 	}
@@ -787,30 +789,22 @@ flushvncache(struct vnode *vp, boolean_t wait)
 	/*
 	 * flush pages to avoid being overly dirty
 	 */
-	if (PUFFS_USE_PAGECACHE(pmp))
-		vinvalbuf(vp, V_SAVE, 0, 0);
+	vfsync(vp, waitfor, 0, NULL, NULL);
+
+	return error;
 }
 
-#ifdef XXXDF
 static int
-puffs_vnop_fsync(void *v)
+puffs_vnop_fsync(struct vop_fsync_args *ap)
 {
-	struct vop_fsync_args /* {
-		const struct vnodeop_desc *a_desc;
-		struct vnode *a_vp;
-		kauth_cred_t a_cred;
-		int a_flags;
-		off_t a_offlo;
-		off_t a_offhi;
-	} */ *ap = v;
 	PUFFS_MSG_VARS(vn, fsync);
 	struct vnode *vp = ap->a_vp;
+	int waitfor = ap->a_waitfor;
 	struct puffs_mount *pmp = MPTOPUFFSMP(vp->v_mount);
 	struct puffs_node *pn = VPTOPP(vp);
 	int error, dofaf;
 
-	error = flushvncache(vp, ap->a_offlo, ap->a_offhi,
-	    (ap->a_flags & FSYNC_WAIT) == FSYNC_WAIT);
+	error = flushvncache(vp, waitfor);
 	if (error)
 		return error;
 
@@ -823,29 +817,13 @@ puffs_vnop_fsync(void *v)
 	if (!EXISTSOP(pmp, FSYNC) || (pn->pn_stat & PNODE_DYING))
 		return 0;
 
-	dofaf = (ap->a_flags & FSYNC_WAIT) == 0 || ap->a_flags == FSYNC_LAZY;
-	/*
-	 * We abuse VXLOCK to mean "vnode is going to die", so we issue
-	 * only FAFs for those.  Otherwise there's a danger of deadlock,
-	 * since the execution context here might be the user server
-	 * doing some operation on another fs, which in turn caused a
-	 * vnode to be reclaimed from the freelist for this fs.
-	 */
-	if (dofaf == 0) {
-		lockmgr(&vp->v_interlock, LK_EXCLUSIVE);
-		if (vp->v_iflag & VI_XLOCK)
-			dofaf = 1;
-		lockmgr(&vp->v_interlock, LK_RELEASE);
-	}
+	dofaf = (waitfor & MNT_WAIT) == 0 || (waitfor & MNT_LAZY) != 0;
 
 	PUFFS_MSG_ALLOC(vn, fsync);
 	if (dofaf)
 		puffs_msg_setfaf(park_fsync);
 
-	puffs_credcvt(&fsync_msg->pvnr_cred, ap->a_cred);
 	fsync_msg->pvnr_flags = ap->a_flags;
-	fsync_msg->pvnr_offlo = ap->a_offlo;
-	fsync_msg->pvnr_offhi = ap->a_offhi;
 	puffs_msg_setinfo(park_fsync, PUFFSOP_VN,
 	    PUFFS_VN_FSYNC, VPTOPNC(vp));
 
@@ -856,7 +834,6 @@ puffs_vnop_fsync(void *v)
 
 	return error;
 }
-#endif
 
 static int
 callremove(struct puffs_mount *pmp, puffs_cookie_t dck, puffs_cookie_t ck,
@@ -1348,6 +1325,7 @@ struct vop_ops puffs_vnode_vops = {
 	.vop_strategy =			puffs_vnop_strategy,
 	.vop_getpages =			vop_stdgetpages,
 	.vop_putpages =			vop_stdputpages,
+	.vop_fsync = 			puffs_vnop_fsync,
 	.vop_inactive =			puffs_vnop_inactive,
 	.vop_reclaim =			puffs_vnop_reclaim,
 	.vop_pathconf =			puffs_vnop_pathconf,

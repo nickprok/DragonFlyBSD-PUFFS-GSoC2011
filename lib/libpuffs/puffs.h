@@ -192,7 +192,7 @@ struct puffs_ops {
 	int (*puffs_node_mmap)(struct puffs_usermount *,
 	    puffs_cookie_t, vm_prot_t, const struct puffs_cred *);
 	int (*puffs_node_fsync)(struct puffs_usermount *,
-	    puffs_cookie_t, const struct puffs_cred *, int, off_t, off_t);
+	    puffs_cookie_t, int);
 	int (*puffs_node_seek)(struct puffs_usermount *,
 	    puffs_cookie_t, off_t, off_t, const struct puffs_cred *);
 	int (*puffs_node_remove)(struct puffs_usermount *,
@@ -332,8 +332,7 @@ enum {
 	int fsname##_node_mmap(struct puffs_usermount *,		\
 	    puffs_cookie_t, vm_prot_t, const struct puffs_cred *);	\
 	int fsname##_node_fsync(struct puffs_usermount *,		\
-	    puffs_cookie_t, const struct puffs_cred *, int,		\
-	    off_t, off_t);						\
+	    puffs_cookie_t,int);					\
 	int fsname##_node_seek(struct puffs_usermount *,		\
 	    puffs_cookie_t, off_t, off_t, const struct puffs_cred *);	\
 	int fsname##_node_remove(struct puffs_usermount *,		\
