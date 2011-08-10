@@ -937,7 +937,7 @@ puffs_vnop_remove(struct vop_nremove_args *ap)
 	if (error != 0) {
 		DPRINTF(("puffs_vnop_remove: cache_vget error: %p %s\n",
 		    dvp, ncp->nc_name));
-		goto out;
+		return EAGAIN;
 	}
 	if (vp->v_type == VDIR) {
 		error = EISDIR;
@@ -1060,7 +1060,7 @@ puffs_vnop_rmdir(struct vop_nrmdir_args *ap)
 	if (error != 0) {
 		DPRINTF(("puffs_vnop_rmdir: cache_vget error: %p %s\n",
 		    dvp, ncp->nc_name));
-		goto out;
+		return EAGAIN;
 	}
 	if (vp->v_type != VDIR) {
 		error = ENOTDIR;
@@ -1140,7 +1140,7 @@ puffs_vnop_link(struct vop_nlink_args *ap)
 
 	vput(dvp);
 	vn_unlock(vp);
-	if (!error) {
+	if (error == 0) {
 		cache_setunresolved(nch);
 		cache_setvp(nch, vp);
 	}
@@ -1239,43 +1239,32 @@ static int
 puffs_vnop_rename(struct vop_nrename_args *ap)
 {
 	PUFFS_MSG_VARS(vn, rename);
-	struct vnode *fdvp = ap->a_fdvp;
-	struct vnode *tdvp = ap->a_tdvp;
-	struct vnode *fvp = NULL;
-	struct vnode *tvp = NULL;
 	struct nchandle *fnch = ap->a_fnch;
 	struct nchandle *tnch = ap->a_tnch;
+	struct vnode *fdvp = ap->a_fdvp;
+	struct vnode *fvp = fnch->ncp->nc_vp;
+	struct vnode *tdvp = ap->a_tdvp;
+	struct vnode *tvp = tnch->ncp->nc_vp;
 	struct ucred *cred = ap->a_cred;
 	struct puffs_mount *pmp = MPTOPUFFSMP(fdvp->v_mount);
-	struct puffs_node *fpn;
 	int error;
 	boolean_t doabort = TRUE;
-
-	error = vget(fdvp, LK_EXCLUSIVE);
-	if (error != 0) {
-		DPRINTF(("puffs_vnop_rename: EAGAIN on fdvp vnode %p %s\n",
-		    fdvp, fnch->ncp->nc_name));
-		return EAGAIN;
-	}
-	error = cache_vref(fnch, cred, &fvp);
-	if (error != 0) {
-		DPRINTF(("puffs_vnop_rename: cache_vref fncp error: %s\n",
-		    fnch->ncp->nc_name));
-		vput(fdvp);
-		return EAGAIN;
-	}
-	fpn = VPTOPP(fvp);
-	vn_unlock(fdvp);
 
 	error = vget(tdvp, LK_EXCLUSIVE);
 	if (error != 0) {
 		DPRINTF(("puffs_vnop_rename: EAGAIN on tdvp vnode %p %s\n",
 		    tdvp, tnch->ncp->nc_name));
-		vrele(fdvp);
-		vrele(fvp);
 		return EAGAIN;
 	}
-	cache_vget(tnch, cred, LK_EXCLUSIVE, &tvp);
+	if (tvp != NULL) {
+		error = vget(tvp, LK_EXCLUSIVE);
+		if (error != 0) {
+			DPRINTF(("puffs_vnop_rename: EAGAIN on tvp vnode %p %s\n",
+			    tvp, tnch->ncp->nc_name));
+			vput(tdvp);
+			return EAGAIN;
+		}
+	}
 
 	if ((fvp->v_mount != tdvp->v_mount) ||
 	    (tvp && (fvp->v_mount != tvp->v_mount))) {
@@ -1312,25 +1301,19 @@ puffs_vnop_rename(struct vop_nrename_args *ap)
 	PUFFS_MSG_RELEASE(rename);
 	error = checkerr(pmp, error, __func__);
 
-	/*
-	 * XXX: stay in touch with the cache.  I don't like this, but
-	 * don't have a better solution either.  See also puffs_link().
-	 */
-	if (error == 0) {
-		puffs_updatenode(fpn, PUFFS_UPDATECTIME);
-		cache_rename(fnch, tnch);
-	}
+	if (error == 0)
+		puffs_updatenode(VPTOPP(fvp), PUFFS_UPDATECTIME);
 
  out:
 	if (tvp != NULL)
-		vput(tvp);
-	if (tdvp == tvp)
-		vrele(tdvp);
-	else
-		vput(tdvp);
-
-	vrele(fdvp);
-	vrele(fvp);
+		vn_unlock(tvp);
+	if (tdvp != tvp)
+		vn_unlock(tdvp);
+	if (error == 0)
+		cache_rename(fnch, tnch);
+	if (tvp != NULL)
+		vrele(tvp);
+	vrele(tdvp);
 
 	return error;
 }
