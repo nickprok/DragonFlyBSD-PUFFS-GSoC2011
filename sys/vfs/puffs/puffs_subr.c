@@ -170,29 +170,6 @@ puffs_mp_release(struct puffs_mount *pmp)
 		cv_broadcast(&pmp->pmp_refcount_cv);
 }
 
-#ifdef XXXDF
-void
-puffs_gop_size(struct vnode *vp, off_t size, off_t *eobp,
-	int flags)
-{
-
-	*eobp = size;
-}
-
-void
-puffs_gop_markupdate(struct vnode *vp, int flags)
-{
-	int uflags = 0;
-
-	if (flags & GOP_UPDATE_ACCESSED)
-		uflags |= PUFFS_UPDATEATIME;
-	if (flags & GOP_UPDATE_MODIFIED)
-		uflags |= PUFFS_UPDATEMTIME;
-
-	puffs_updatenode(VPTOPP(vp), uflags, 0);
-}
-#endif
-
 void
 puffs_senderr(struct puffs_mount *pmp, int type, int error,
 	const char *str, puffs_cookie_t ck)
