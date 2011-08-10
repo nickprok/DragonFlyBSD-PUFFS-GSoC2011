@@ -49,7 +49,7 @@ static struct puffs_node *puffs_cookie2pnode(struct puffs_mount *,
  */
 int
 puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
-	voff_t vsize, dev_t rdev, struct vnode **vpp)
+	voff_t vsize, struct vnode **vpp)
 {
 	struct puffs_mount *pmp;
 	struct puffs_newcookie *pnc;
@@ -167,8 +167,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 /* new node creating for creative vop ops (create, symlink, mkdir, mknod) */
 int
 puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
-	puffs_cookie_t ck, struct namecache *ncp,
-	enum vtype type, dev_t rdev)
+	puffs_cookie_t ck, enum vtype type)
 {
 	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
 	struct puffs_newcookie *pnc;
@@ -208,7 +207,7 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 	LIST_INSERT_HEAD(&pmp->pmp_newcookie, pnc, pnc_entries);
 	lockmgr(&pmp->pmp_lock, LK_RELEASE);
 
-	error = puffs_getvnode(dvp->v_mount, ck, type, 0, rdev, &vp);
+	error = puffs_getvnode(dvp->v_mount, ck, type, 0, &vp);
 	if (error)
 		return error;
 	*vpp = vp;
@@ -291,7 +290,7 @@ puffs_makeroot(struct puffs_mount *pmp)
 	 * No matter, grab another and stuff it with the cookie.
 	 */
 	if ((rv = puffs_getvnode(pmp->pmp_mp, pmp->pmp_root_cookie,
-	    pmp->pmp_root_vtype, pmp->pmp_root_vsize, pmp->pmp_root_rdev, &vp)))
+	    pmp->pmp_root_vtype, pmp->pmp_root_vsize, &vp)))
 		return rv;
 
 	/*

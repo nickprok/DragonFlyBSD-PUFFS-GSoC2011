@@ -226,10 +226,9 @@ int	puffs_msg_wait2(struct puffs_mount *, struct puffs_msgpark *,
 void	puffs_msg_sendresp(struct puffs_mount *, struct puffs_req *, int);
 
 int	puffs_getvnode(struct mount *, puffs_cookie_t, enum vtype,
-		       voff_t, dev_t, struct vnode **);
+		       voff_t, struct vnode **);
 int	puffs_newnode(struct mount *, struct vnode *, struct vnode **,
-		      puffs_cookie_t, struct namecache *,
-		      enum vtype, dev_t);
+		      puffs_cookie_t, enum vtype);
 void	puffs_putvnode(struct vnode *);
 
 void	puffs_releasenode(struct puffs_node *);

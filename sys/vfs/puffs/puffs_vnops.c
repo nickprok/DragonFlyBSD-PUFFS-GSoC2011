@@ -155,7 +155,7 @@ puffs_vnop_lookup(struct vop_nresolve_args *ap)
 	if (error == PUFFS_NOSUCHCOOKIE) {
 		error = puffs_getvnode(dvp->v_mount,
 		    lookup_msg->pvnr_newnode, lookup_msg->pvnr_vtype,
-		    lookup_msg->pvnr_size, lookup_msg->pvnr_rdev, &vp);
+		    lookup_msg->pvnr_size, &vp);
 		if (error) {
 			puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
 			    lookup_msg->pvnr_newnode, ncp, cred);
@@ -224,7 +224,7 @@ puffs_vnop_lookupdotdot(struct vop_nlookupdotdot_args *ap)
 	    1, &vp);
 	if (error == PUFFS_NOSUCHCOOKIE) {
 		error = puffs_getvnode(dvp->v_mount,
-		    lookupdotdot_msg->pvnr_newnode, VDIR, 0, 0, &vp);
+		    lookupdotdot_msg->pvnr_newnode, VDIR, 0, &vp);
 		if (error) {
 			puffs_abortbutton(pmp, PUFFS_ABORT_LOOKUP, VPTOPNC(dvp),
 			    lookupdotdot_msg->pvnr_newnode, NULL, cred);
@@ -284,7 +284,7 @@ puffs_vnop_create(struct vop_ncreate_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    create_msg->pvnr_newnode, ncp, vap->va_type, 0);
+	    create_msg->pvnr_newnode, vap->va_type);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_CREATE, dpn->pn_cookie,
 		    create_msg->pvnr_newnode, ncp, cred);
@@ -340,8 +340,7 @@ puffs_vnop_mknod(struct vop_nmknod_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    mknod_msg->pvnr_newnode, ncp, vap->va_type,
-	    makeudev(vap->va_rmajor, vap->va_rminor));
+	    mknod_msg->pvnr_newnode, vap->va_type);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_MKNOD, dpn->pn_cookie,
 		    mknod_msg->pvnr_newnode, ncp, cred);
@@ -1002,7 +1001,7 @@ puffs_vnop_mkdir(struct vop_nmkdir_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    mkdir_msg->pvnr_newnode, ncp, VDIR, 0);
+	    mkdir_msg->pvnr_newnode, VDIR);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_MKDIR, dpn->pn_cookie,
 		    mkdir_msg->pvnr_newnode, ncp, cred);
@@ -1184,7 +1183,7 @@ puffs_vnop_symlink(struct vop_nsymlink_args *ap)
 		goto out;
 
 	error = puffs_newnode(mp, dvp, ap->a_vpp,
-	    symlink_msg->pvnr_newnode, ncp, VLNK, 0);
+	    symlink_msg->pvnr_newnode, VLNK);
 	if (error)
 		puffs_abortbutton(pmp, PUFFS_ABORT_SYMLINK, dpn->pn_cookie,
 		    symlink_msg->pvnr_newnode, ncp, cred);
